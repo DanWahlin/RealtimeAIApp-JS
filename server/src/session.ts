@@ -110,27 +110,21 @@ export class RTSession {
     const backend = OPENAI_API_KEY && OPENAI_ENDPOINT ? 'azure' : 'openai';
     this.logger.info(`Initializing RT client for backend: ${backend}`);
 
-    try {
-      if (backend === 'azure') {
-        // ** Code to ensure we're getting a token correctly
-        // const credentials = new DefaultAzureCredential();
-        // const getToken = getBearerTokenProvider(credentials, 'https://cognitiveservices.azure.com/.default');
-        // const token = await getToken();
-        // console.log(token);
-        return new RTClient(
-          new URL(OPENAI_ENDPOINT!),
-          new DefaultAzureCredential(),
-          { deployment: OPENAI_DEPLOYMENT! },
-        );
-      }
-      return new RTClient(new AzureKeyCredential(OPENAI_API_KEY!), {
-        model: OPENAI_DEPLOYMENT!,
-      });
-    } 
-    catch (error) {
-      this.logger.error({ error }, 'Error initializing RTClient');
-      throw error;
+    if (backend === 'azure') {
+      // ** Code to ensure we're getting a token correctly
+      // const credentials = new DefaultAzureCredential();
+      // const getToken = getBearerTokenProvider(credentials, 'https://cognitiveservices.azure.com/.default');
+      // const token = await getToken();
+      // console.log(token);
+      return new RTClient(
+        new URL(OPENAI_ENDPOINT!),
+        new DefaultAzureCredential(),
+        { deployment: OPENAI_DEPLOYMENT! },
+      );
     }
+    return new RTClient(new AzureKeyCredential(OPENAI_API_KEY!), {
+      model: OPENAI_DEPLOYMENT!,
+    });
   }
 
   private setupEventHandlers() {
