@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", // Use the latest stable ECMAScript target
+    "module": "ESNext", // Prefer ES modules for modern interoperability
+    "outDir": "./dist", // Compiled files go to the dist directory
+    "rootDir": "./src", // Source files reside in src
+    "strict": true, // Enables all strict type-checking options
+    "esModuleInterop": true, // Ensures compatibility with CommonJS modules
+    "forceConsistentCasingInFileNames": true, // Enforces consistent file naming
+    "moduleResolution": "Node", // Use Node.js module resolution
+    "incremental": true, // Enables incremental compilation
+    "skipLibCheck": true, // Skips type checking of declaration files for faster builds
+    "resolveJsonModule": true, // Allows importing JSON files
+    "isolatedModules": true, // Ensures that each file can be safely transpiled in isolation
+    "allowSyntheticDefaultImports": true, // Allows default imports from modules with no default export
+    "noEmitOnError": true, // Prevents emitting output files if there are TypeScript errors
+    "useDefineForClassFields": true // Aligns behavior of class fields with modern JS standards
+  },
+  "include": ["src/**/*"], // Includes all files in the src folder
+  "exclude": ["node_modules", "dist"] // Exclude unnecessary folders
+}
+
