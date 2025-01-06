@@ -58,7 +58,7 @@ const {
 } = process.env as Record<string, string>;
 
 export class RTSession {
-  private client: RTClient;
+  private client!: RTClient;
   private ws: WebSocket;
   private readonly sessionId: string;
   private logger: Logger;
@@ -71,7 +71,7 @@ export class RTSession {
   }
 
   async initialize() {
-    this.client = await this.initializeClient();
+    this.client = this.initializeClient();
     this.setupEventHandlers();
     this.logger.info('New session created');
     this.logger.debug('Configuring realtime session');
@@ -106,7 +106,7 @@ export class RTSession {
     this.ws.send(Buffer.from(message), { binary: true });
   }
 
-  private async initializeClient(): Promise<RTClient> {
+  private initializeClient(): RTClient {
     const backend = OPENAI_API_KEY && OPENAI_ENDPOINT ? 'azure' : 'openai';
     this.logger.info(`Initializing RT client for backend: ${backend}`);
 
