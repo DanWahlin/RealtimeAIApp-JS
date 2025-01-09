@@ -54,7 +54,10 @@ type WSMessage = TextDelta | Transcription | UserMessage | ControlMessage;
 const {
   OPENAI_API_KEY,
   OPENAI_ENDPOINT,
-  OPENAI_DEPLOYMENT
+  OPENAI_DEPLOYMENT,
+  AZURE_CLIENT_ID,
+  AZURE_TENANT_ID,
+  AZURE_CLIENT_SECRET
 } = process.env as Record<string, string>;
 
 export class RTSession {
@@ -109,22 +112,39 @@ export class RTSession {
   private initializeClient(): RTClient {
     const backend = OPENAI_API_KEY && OPENAI_ENDPOINT ? 'azure' : 'openai';
     this.logger.info(`Initializing RT client for backend: ${backend}`);
-
-    if (backend === 'azure') {
-      // ** Code to ensure we're getting a token correctly
-      // const credentials = new DefaultAzureCredential();
-      // const getToken = getBearerTokenProvider(credentials, 'https://cognitiveservices.azure.com/.default');
-      // const token = await getToken();
-      // console.log(token);
-      return new RTClient(
-        new URL(OPENAI_ENDPOINT!),
-        new DefaultAzureCredential(),
-        { deployment: OPENAI_DEPLOYMENT! },
-      );
+  
+    try {
+      if (backend === 'azure') {
+        // const credential = new DefaultAzureCredential();
+        // this.logger.info('DefaultAzureCredential created');
+  
+        // // Log the environment variables to ensure they are set correctly
+        // this.logger.info({
+        //   OPENAI_API_KEY,
+        //   OPENAI_ENDPOINT,
+        //   OPENAI_DEPLOYMENT
+        // }, 'Environment variables');
+  
+        // // Attempt to acquire a token and log the result
+        // credential.getToken("https://cognitiveservices.azure.com/.default").then(token => {
+        //   this.logger.debug('Token acquired', { token });
+        // }).catch(error => {
+        //   this.logger.error('Error acquiring token', { error });
+        // });
+  
+        return new RTClient(
+          new URL(OPENAI_ENDPOINT!),
+          new DefaultAzureCredential(),
+          { deployment: OPENAI_DEPLOYMENT! },
+        );
+      }
+      return new RTClient(new AzureKeyCredential(OPENAI_API_KEY!), {
+        model: OPENAI_DEPLOYMENT!,
+      });
+    } catch (error) {
+      this.logger.error({ error }, 'Error initializing RT client');
+      throw error;
     }
-    return new RTClient(new AzureKeyCredential(OPENAI_API_KEY!), {
-      model: OPENAI_DEPLOYMENT!,
-    });
   }
 
   private setupEventHandlers() {
