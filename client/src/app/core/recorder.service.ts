@@ -23,7 +23,7 @@ export class RecorderService {
       this.mediaStreamSource = this.audioContext.createMediaStreamSource(this.mediaStream);
       //await this.audioContext.audioWorklet.addModule('/recorder-worklet.js');
       const recorderWorkletBlobUrl = URL.createObjectURL(new Blob([`
-        registerProcessor('recorder-worklet', class param extends AudioWorkletProcessor {
+        registerProcessor('recorder-worklet', class RecorderPCMProcessor extends AudioWorkletProcessor {
             constructor() {
               super();
             }
