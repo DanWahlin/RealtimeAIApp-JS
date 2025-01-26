@@ -23,8 +23,7 @@ interface WSMessage {
 @Component({
   selector: 'app-chat-interface',
   templateUrl: './chat-interface.component.html',
-  styleUrls: ['./chat-interface.component.css'],
-  imports: [NgClass]
+  styleUrls: ['./chat-interface.component.css']
 })
 export class ChatInterfaceComponent implements OnInit, OnDestroy {
   endpoint = 'ws://localhost:8080/realtime';

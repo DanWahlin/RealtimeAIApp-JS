@@ -52,6 +52,7 @@ type ControlMessage = SpeechStarted | Connected | TextDone;
 type WSMessage = TextDelta | Transcription | UserMessage | ControlMessage;
 
 const {
+  BACKEND,
   OPENAI_API_KEY,
   OPENAI_ENDPOINT,
   OPENAI_DEPLOYMENT,
@@ -110,27 +111,26 @@ export class RTSession {
   }
 
   private initializeClient(): RTClient {
-    const backend = OPENAI_API_KEY && OPENAI_ENDPOINT ? 'azure' : 'openai';
-    this.logger.info(`Initializing RT client for backend: ${backend}`);
+    this.logger.info(`Initializing RT client for backend: ${BACKEND}`);
   
     try {
-      if (backend === 'azure') {
-        // const credential = new DefaultAzureCredential();
-        // this.logger.info('DefaultAzureCredential created');
+      if (BACKEND === 'azure') {
+        const credential = new DefaultAzureCredential();
+        this.logger.info('DefaultAzureCredential created');
   
-        // // Log the environment variables to ensure they are set correctly
-        // this.logger.info({
-        //   OPENAI_API_KEY,
-        //   OPENAI_ENDPOINT,
-        //   OPENAI_DEPLOYMENT
-        // }, 'Environment variables');
+        // Log the environment variables to ensure they are set correctly
+        this.logger.info({
+          OPENAI_API_KEY,
+          OPENAI_ENDPOINT,
+          OPENAI_DEPLOYMENT
+        }, 'Environment variables');
   
-        // // Attempt to acquire a token and log the result
-        // credential.getToken("https://cognitiveservices.azure.com/.default").then(token => {
-        //   this.logger.debug('Token acquired', { token });
-        // }).catch(error => {
-        //   this.logger.error('Error acquiring token', { error });
-        // });
+        // Attempt to acquire a token and log the result
+        credential.getToken("https://cognitiveservices.azure.com/.default").then(token => {
+          this.logger.debug('Token acquired', { token });
+        }).catch(error => {
+          this.logger.error('Error acquiring token', { error });
+        });
   
         return new RTClient(
           new URL(OPENAI_ENDPOINT!),
