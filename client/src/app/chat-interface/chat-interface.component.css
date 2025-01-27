@@ -47,6 +47,7 @@
 .messages {
   margin-left: 15px;
   margin-top: 60px;
+  width: 75%;
 }
 
 .message {
@@ -69,4 +70,4 @@ button:hover {
 
 button:disabled {
   opacity: 0.5;
-  
+}

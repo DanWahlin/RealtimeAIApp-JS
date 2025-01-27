@@ -62,11 +62,11 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.webSocketService.messages$.subscribe(async (message) => {
         if (message.type === 'text') {
-          const data = JSON.parse(message.data) as WSMessage;
+          const data = JSON.parse(message.data as string) as WSMessage;
           await this.handleWSMessage(data);
         } 
         else if (message.type === 'binary' && this.playerService.initialized && !this.isAudioOff) {
-          this.playerService.play(new Int16Array(message.data));
+          this.playerService.play(new Int16Array(message.data as ArrayBuffer));
         }
       })
     );
