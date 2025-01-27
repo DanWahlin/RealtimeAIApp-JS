@@ -1,4 +1,4 @@
-<div>
+<div class="controls-container">
     <button (click)="handleConnect()" [disabled]="isConnecting" title="Connect">
         {{isConnecting
         ? "Connecting..."
@@ -24,12 +24,10 @@
     </span>
 </div>
 
-<br />
-
-<div [hidden]="!isConnected">
+<div class="messages" [hidden]="!isConnected">
     <div>
         @for (message of messages; track message.id) {
-        <div>
+        <div class="message">
             {{message.content}}
         </div>
         }
@@ -40,6 +38,7 @@
         <br /><br />
         <input [value]="currentMessage" (input)="onInputChange($event)" placeholder="Type your message..."
             (keyup.enter)="sendMessage()" [disabled]="!isConnected" />
+            &nbsp;&nbsp;
         <button (click)="sendMessage()" [disabled]="!isConnected" title="Send Message">
             Send Message
         </button>

@@ -117,7 +117,7 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(message.data);
     } else {
-      throw new Error('WebSocket is not open');
+      // throw new Error('WebSocket is not open');
     }
   }
 

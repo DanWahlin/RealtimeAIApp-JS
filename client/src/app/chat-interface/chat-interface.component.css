@@ -1,19 +1,72 @@
-.microphone {
-  font-size: 1em;
-  cursor: pointer;
-  margin: 5px 0 0 15px;
-  height: 20px;
-  width: 20px;
-  position: relative;
-  top: 5px; /* Adjust this value as needed */
+.controls-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: #333;
+  padding: 0 1rem;
+  z-index: 100;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.speaker {
-  font-size: 1em;
+.microphone, .speaker {
   cursor: pointer;
-  margin: 50px 0px 0 15px;
-  height: 20px;
-  width: 20px;
-  position: relative;
-  top: 5px; /* Adjust this value as needed */
+  height: 24px;
+  width: 24px;
+  margin-left: 15px;
+  filter: invert(1);
+  transition: opacity 0.2s;
 }
+
+.microphone:hover, .speaker:hover {
+  opacity: 0.8;
+}
+
+.controls-container button {
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.controls-container button:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.controls-container button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.messages {
+  margin-left: 15px;
+  margin-top: 60px;
+}
+
+.message {
+  margin-top: 10px;
+}
+
+button {
+  background: #333;
+  color: white;
+  border: 1px solid rgba(0,0,0,0.3);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button:hover {
+  background: #444;
+}
+
+button:disabled {
+  opacity: 0.5;
+  
