@@ -30,6 +30,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   messages: Message[] = [];
   currentMessage = '';
   isRecording = false;
+  isAudioOff = false;
   isConnected = false;
   isConnecting = false;
   validEndpoint = true;
@@ -44,11 +45,13 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
 
   @ViewChild('messagesEnd', { static: true }) messagesEndRef!: ElementRef;
 
-  ngOnInit(): void {
+  async ngOnInit() {
+    this.playerService.init(24000);
     // Subscribe to connection status
     this.subscriptions.add(
       this.webSocketService.isConnected$.subscribe((connected) => {
         this.isConnected = connected;
+        this.toggleRecording();
         if (!connected) {
           this.messages = []; // Clear messages on disconnection
         }
@@ -62,7 +65,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
           const data = JSON.parse(message.data) as WSMessage;
           await this.handleWSMessage(data);
         } 
-        else if (message.type === 'binary' && this.playerService.initialized) {
+        else if (message.type === 'binary' && this.playerService.initialized && !this.isAudioOff) {
           this.playerService.play(new Int16Array(message.data));
         }
       })
@@ -73,10 +76,6 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
     this.disconnect();
-  }
-
-  async initAudioPlayer() {
-    await this.playerService.init(24000);
   }
 
   async handleAudioRecord(isRecording: boolean) {
@@ -210,152 +209,13 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     }
   }
 
+  toggleAudio() {
+    this.isAudioOff = !this.isAudioOff;
+  }
+
   onInputChange(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.currentMessage = input.value || '';
   }
 
 }
-
-// import { Component, OnInit, OnDestroy, inject } from '@angular/core';
-// import { AudioPlayerService } from '../core/audio-player.service';
-// import { AudioRecorderService } from '../core/audio-recorder.service';
-// import { WebSocketClientService, WebSocketMessage } from '../core/websocket-client.service';
-// import { NgClass } from '@angular/common';
-// import { Subscription } from 'rxjs';
-
-// interface Message {
-//   id: string;
-//   type: 'user' | 'assistant' | 'status';
-//   content: string;
-// }
-
-// type WSControlAction = "speech_started" | "connected" | "text_done";
-
-// @Component({
-//   selector: 'app-chat-interface',
-//   templateUrl: './chat-interface.component.html',
-//   styleUrls: ['./chat-interface.component.css'],
-//   imports: [NgClass],
-// })
-// export class ChatInterfaceComponent implements OnInit, OnDestroy {
-//   endpoint = 'ws://localhost:8080/realtime';
-//   messages: Message[] = [];
-//   currentMessage = '';
-//   isRecording = false;
-//   isConnected = false;
-//   isConnecting = false;
-//   validEndpoint = true;
-
-//   private subscriptions = new Subscription();
-
-//   audioPlayerService = inject(AudioPlayerService);
-//   audioRecorderService = inject(AudioRecorderService);
-//   webSocketClientService = inject(WebSocketClientService);
-
-//   ngOnInit(): void {
-//     // Subscribe to connection status
-//     this.subscriptions.add(
-//       this.webSocketClientService.isConnected$.subscribe((connected) => {
-//         this.isConnected = connected;
-//         if (!connected) {
-//           this.messages = []; // Clear messages on disconnection
-//         }
-//       })
-//     );
-
-//     // Subscribe to WebSocket messages
-//     this.subscriptions.add(
-//       this.webSocketClientService.messages$.subscribe((message) => {
-//         this.handleWSMessage(message);
-//       })
-//     );
-//   }
-
-//   ngOnDestroy(): void {
-//     this.subscriptions.unsubscribe();
-//     this.disconnect();
-//   }
-
-//   validateEndpoint(url: string): void {
-//     this.endpoint = url;
-//     try {
-//       new URL(url);
-//       this.validEndpoint = true;
-//     } catch {
-//       this.validEndpoint = false;
-//     }
-//   }
-
-//   async handleConnect(): Promise<void> {
-//     if (this.isConnected) {
-//       await this.disconnect();
-//     } else {
-//       this.isConnecting = true;
-//       try {
-//         this.webSocketClientService.connect(this.endpoint);
-//       } catch (error) {
-//         console.error('Connection failed:', error);
-//       } finally {
-//         this.isConnecting = false;
-//       }
-//     }
-//   }
-
-//   async disconnect(): Promise<void> {
-//     if (this.isRecording) {
-//       await this.toggleRecording();
-//     }
-//     await this.audioRecorderService.stop();
-//     this.audioPlayerService.clear();
-//     this.webSocketClientService.close();
-//   }
-
-//   async toggleRecording(): Promise<void> {
-//     try {
-//       if (!this.isRecording && this.isConnected) {
-//         this.isRecording = true;
-//         await this.audioRecorderService.start((buffer: ArrayBuffer) => {
-//           this.webSocketClientService.send({ type: 'binary', data: buffer }).catch((error) => {
-//             console.error('WebSocket send error:', error);
-//           });
-//         });
-//       } else {
-//         this.isRecording = false;
-//         await this.audioRecorderService.stop();
-//       }
-//     } catch (error) {
-//       console.error('Recording error:', error);
-//       this.isRecording = false;
-//     }
-//   }
-  
-
-//   private handleWSMessage(message: WebSocketMessage): void {
-//     if (message.type === 'text') {
-//       const parsedMessage = JSON.parse(message.data);
-//       this.processParsedMessage(parsedMessage);
-//     } else if (message.type === 'binary') {
-//       this.audioPlayerService.play(new Int16Array(message.data));
-//     }
-//   }
-
-//   private processParsedMessage(parsedMessage: any): void {
-//     switch (parsedMessage.type) {
-//       case 'text_delta':
-//         // Process text_delta messages
-//         break;
-//       case 'control':
-//         // Handle control messages
-//         break;
-//       default:
-//         console.warn('Unknown message type:', parsedMessage);
-//     }
-//   }
-
-//   onInputChange(event: Event): void {
-//     const input = event.target as HTMLInputElement;
-//     this.currentMessage = input.value || '';
-//   }
-  
-// }

@@ -1,4 +1,4 @@
-<div className="flex h-screen">
+<div>
     <button (click)="handleConnect()" [disabled]="isConnecting" title="Connect">
         {{isConnecting
         ? "Connecting..."
@@ -6,12 +6,28 @@
         ? "Disconnect"
         : "Connect"}}
     </button>
+    <span (click)="toggleRecording()" [hidden]="!isConnected">
+        @if (isRecording) {
+        <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">
+        }
+        @else {
+        <img src="/images/microphone-off.svg" alt="Mic Off" title="Mic Off" class="microphone">
+        }
+    </span>
+    <span (click)="toggleAudio()" [hidden]="!isConnected">
+        @if (!isAudioOff) {
+        <img src="/images/speaker-on.svg" alt="Mic On" title="Mic On" class="speaker">
+        }
+        @else {
+        <img src="/images/speaker-off.svg" alt="Mic Off" title="Mic Off" class="speaker">
+        }
+    </span>
 </div>
 
 <br />
 
-<div className="flex-1 flex flex-col">
-    <div className="flex-1 p-4 overflow-y-auto">
+<div [hidden]="!isConnected">
+    <div>
         @for (message of messages; track message.id) {
         <div>
             {{message.content}}
@@ -20,22 +36,12 @@
         <div #messagesEnd></div>
     </div>
 
-    <div className="p-4 border-t">
-        <div>
-            <div (click)="toggleRecording()" [hidden]="!isConnected">
-                @if (isRecording) {
-                    <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">
-                }
-                @else {
-                    <img src="/images/microphone-off.svg" alt="Mic Off" title="Mic Off" class="microphone">
-                }
-            </div>
-            <br /><br />
-            <input [value]="currentMessage" (input)="onInputChange($event)" placeholder="Type your message..."
+    <div>
+        <br /><br />
+        <input [value]="currentMessage" (input)="onInputChange($event)" placeholder="Type your message..."
             (keyup.enter)="sendMessage()" [disabled]="!isConnected" />
-            <button (click)="sendMessage()" [disabled]="!isConnected" title="Send Message">
-                Send Message
-            </button>
-        </div>
+        <button (click)="sendMessage()" [disabled]="!isConnected" title="Send Message">
+            Send Message
+        </button>
     </div>
 </div>

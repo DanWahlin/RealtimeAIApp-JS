@@ -81,13 +81,16 @@ export class RTSession {
     this.logger.debug('Configuring realtime session');
     await this.client.configure({
       modalities: ['text', 'audio'],
+      voice: 'alloy',
       input_audio_format: 'pcm16',
       input_audio_transcription: {
         model: 'whisper-1',
       },
       turn_detection: {
+        threshold: 0.4,
+        silence_duration_ms: 600,
         type: 'server_vad',
-      },
+      }
     });
 
     this.logger.debug('Realtime session configured successfully');
@@ -161,7 +164,8 @@ export class RTSession {
     try {
       if (isBinary) {
         await this.handleBinaryMessage(message);
-      } else {
+      } 
+      else {
         await this.handleTextMessage(message);
       }
     } catch (error) {
@@ -172,7 +176,8 @@ export class RTSession {
   private async handleBinaryMessage(message: Buffer) {
     try {
       await this.client.sendAudio(new Uint8Array(message));
-    } catch (error) {
+    } 
+    catch (error) {
       this.logger.error({ error }, 'Failed to send audio data');
       throw error;
     }
@@ -259,7 +264,8 @@ export class RTSession {
           for await (const content of item) {
             if (content.type === 'text') {
               await this.handleTextContent(content);
-            } else if (content.type === 'audio') {
+            } 
+            else if (content.type === 'audio') {
               await this.handleAudioContent(content);
             }
           }
@@ -298,8 +304,11 @@ export class RTSession {
       this.logger.debug('Starting event loop');
       for await (const event of this.client.events()) {
         if (event.type === 'response') {
+          this.logger.debug('Event loop handling response');
           await this.handleResponse(event);
-        } else if (event.type === 'input_audio') {
+        } 
+        else if (event.type === 'input_audio') {
+          this.logger.debug('Event loop handling input_audio');
           await this.handleInputAudio(event);
         }
       }

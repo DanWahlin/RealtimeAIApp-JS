@@ -4,12 +4,13 @@ import { Injectable } from '@angular/core';
   providedIn: 'root',
 })
 export class PlayerService {
+  private audioContext: AudioContext | null = null;
   private playbackNode: AudioWorkletNode | null = null;
   initialized = false;
 
   async init(sampleRate: number) {
     if (this.playbackNode === null) {
-      const audioContext = new AudioContext({ sampleRate });
+      this.audioContext = new AudioContext({ sampleRate });
       // await audioContext.audioWorklet.addModule('/playback-worklet.js');
       const playbackWorkletBlobUrl = URL.createObjectURL(new Blob([`
         registerProcessor('playback-worklet', class PlaybackProcessor extends AudioWorkletProcessor {
@@ -44,22 +45,45 @@ export class PlayerService {
           });
         `],
         { type: 'application/javascript' }));
-      await audioContext.audioWorklet.addModule(playbackWorkletBlobUrl);
-      this.playbackNode = new AudioWorkletNode(audioContext, 'playback-worklet');
-      this.playbackNode.connect(audioContext.destination);
+      await this.audioContext.audioWorklet.addModule(playbackWorkletBlobUrl);
+      this.playbackNode = new AudioWorkletNode(this.audioContext, 'playback-worklet');
+      this.playbackNode.connect(this.audioContext.destination);
+      console.log(`audioContext.destination = ${this.audioContext.destination.channelInterpretation}`);
       this.initialized = true;
     }
   }
 
-  play(buffer: Int16Array) {
-    if (this.playbackNode) {
-      this.playbackNode.port.postMessage(buffer);
+  async play(buffer: Int16Array) {
+    if (!this.playbackNode || !this.audioContext) {
+      console.warn('Audio not initialized');
+      return;
+    }
+
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    if (buffer && buffer.length > 0) {
+      try {
+        this.playbackNode.port.postMessage(buffer);
+      } 
+      catch (error) {
+        console.error('Failed to play audio:', error);
+      }
+    } 
+    else {
+      console.warn('Empty or invalid audio buffer received so unable to play the audio');
     }
   }
 
   clear() {
     if (this.playbackNode) {
-      this.playbackNode.port.postMessage(null);
+      try {
+        this.playbackNode.port.postMessage(null);
+      } 
+      catch (error) {
+        console.error('Failed to clear audio:', error);
+      }
     }
   }
 }

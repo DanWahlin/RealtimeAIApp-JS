@@ -94,23 +94,23 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
     this.messageSubject.next(message);
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<WebSocketMessage> {
-    return {
-      next: (): Promise<IteratorResult<WebSocketMessage>> => {
-        if (this.hasError) {
-          return Promise.reject(this.errorSubject);
-        } else if (this.done) {
-          return Promise.resolve({ value: undefined, done: true });
-        } else if (this.messageQueue.length > 0) {
-          const message = this.messageQueue.shift()!;
-          return Promise.resolve({ value: message, done: false });
-        } else {
-          return new Promise((resolve, reject) => {
-            this.receiverQueue.push([resolve, reject]);
-          });
-        }
-      },
-    };
+  async *[Symbol.asyncIterator](): AsyncIterator<WebSocketMessage> {
+    while (true) {
+      if (this.hasError) {
+        throw this.errorSubject;
+      }
+      if (this.done) {
+        return;
+      }
+      if (this.messageQueue.length > 0) {
+        yield this.messageQueue.shift()!;
+        continue;
+      }
+      const message = await new Promise<IteratorResult<WebSocketMessage>>((resolve, reject) => {
+        this.receiverQueue.push([resolve, reject]);
+      });
+      yield message.value;
+    }
   }
 
   send(message: WebSocketMessage): void {
