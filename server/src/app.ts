@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import http from "http";
 import { pino } from "pino";
 import { RTSession } from "./session.js";
+import { stringify } from "querystring";
 
 const logger = pino({
   level: process.env.LOG_LEVEL || "debug",
@@ -36,10 +37,34 @@ server.on("upgrade", (request, socket, head) => {
 
 wss.on("connection", (ws) => {
   logger.info("New WebSocket connection established");
+
+  const handleMessage = (message: any) => {
+    if (!message) {
+      logger.warn('Received empty message');
+      return;
+    }
+
+    let messageString = '';
+    try {
+      if (Buffer.isBuffer(message)) {
+        messageString = message.toString('utf8');
+        const parsedMessage = JSON.parse(messageString);
+      
+        if (parsedMessage.type === 'init' && messageString) {
+          new RTSession(ws, logger, parsedMessage.instructions);
+          ws.removeListener('message', handleMessage); // Remove the listener after processing the initial message
+        }
+      }
+    } catch (error) {
+      logger.error({ error, message, messageString }, 'Message processing error');
+    }
+  };
+
+  ws.on("message", handleMessage);
+
   ws.on("close", () => {
     logger.info("WebSocket connection closed");
   });
-  new RTSession(ws, logger);
 });
 
 const PORT = process.env.PORT || 8080;

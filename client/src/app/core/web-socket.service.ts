@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 
 interface WebSocketMessage {
-  type: 'binary' | 'text';
+  type: 'binary' | 'text' | 'init';
   data: ArrayBuffer | string;
 }
 
@@ -17,13 +17,19 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
   private messageQueue: WebSocketMessage[] = [];
   private hasError = false;
 
-  connect(url: string): void {
+  connect(url: string, instructions: string): void {
     if (this.socket) this.close();
 
     this.socket = new WebSocket(url);
     this.socket.binaryType = 'arraybuffer';
 
-    this.socket.onopen = () => this.connectedSubject.next(true);
+    this.socket.onopen = () => {
+      this.connectedSubject.next(true);
+      this.send({ 
+        type: 'text', 
+        data: JSON.stringify({ type: 'init', instructions })
+      });
+    };
     this.socket.onclose = () => this.connectedSubject.next(false);
     this.socket.onerror = (event: Event) => {
       const error = (event as ErrorEvent).error || new Error('WebSocket error');
@@ -58,13 +64,13 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
     }
   }
 
-  send(message: WebSocketMessage): void {
+  send(message: WebSocketMessage) {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(message.data);
     }
   }
 
-  close(): void {
+  close() {
     this.socket?.close();
     this.socket = null;
   }

@@ -10,6 +10,7 @@ import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity'
 import { AzureKeyCredential } from '@azure/core-auth';
 import { Logger } from 'pino';
 import { config } from "dotenv";
+import { StringDecoder } from 'string_decoder';
 config({ path: '../.env' });
 
 interface TextDelta {
@@ -55,10 +56,7 @@ const {
   BACKEND,
   OPENAI_API_KEY,
   OPENAI_ENDPOINT,
-  OPENAI_DEPLOYMENT,
-  AZURE_CLIENT_ID,
-  AZURE_TENANT_ID,
-  AZURE_CLIENT_SECRET
+  OPENAI_DEPLOYMENT
 } = process.env as Record<string, string>;
 
 export class RTSession {
@@ -66,11 +64,25 @@ export class RTSession {
   private ws: WebSocket;
   private readonly sessionId: string;
   private logger: Logger;
+  private instructions: string;
+  private modelDescription = 'Patient diagnosis form';
+  private jsonSchema = {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      age: { type: 'number' },
+      diagnosis: { type: 'string' },
+      treatment: { type: 'string' },
+    },
+    required: ['name', 'age', 'diagnosis', 'treatment'],
+  };
 
-  constructor(ws: WebSocket, logger: Logger) {
+  constructor(ws: WebSocket, logger: Logger, instructions: string) {
     this.sessionId = crypto.randomUUID();
     this.ws = ws;
     this.logger = logger.child({ sessionId: this.sessionId });
+    this.instructions = instructions;
+    logger.info({ instructions }, 'Instructions received');
     this.initialize();
   }
 
@@ -80,6 +92,7 @@ export class RTSession {
     this.logger.info('New session created');
     this.logger.debug('Configuring realtime session');
     await this.client.configure({
+      instructions: this.instructions,
       modalities: ['text', 'audio'],
       voice: 'alloy',
       input_audio_format: 'pcm16',

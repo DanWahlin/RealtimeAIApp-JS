@@ -1,4 +1,3 @@
-import { NgClass } from '@angular/common';
 import { Component, OnInit, OnDestroy, ElementRef, ViewChild, inject } from '@angular/core';
 import { PlayerService } from '@core/player.service';
 import { RecorderService } from '@core/recorder.service';
@@ -38,6 +37,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   currentConnectingMessage: Message | undefined = { id: '', type: '', content: '' };
   currentUserMessage: Message | undefined = { id: '', type: '', content: '' };
   private subscriptions = new Subscription();
+  instructions: string = '';
 
   playerService = inject(PlayerService);
   recorderService = inject(RecorderService);
@@ -46,8 +46,17 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   @ViewChild('messagesEnd', { static: true }) messagesEndRef!: ElementRef;
 
   async ngOnInit() {
+    this.instructions = `You are a helpful spanish language coach. You read sentences in
+    English and then read the same sentence in Spanish. The user will 
+    then repeat the sentence in Spanish. You will then provide feedback.
+    Examples of sentences include:
+    - What is your name?
+    - How are you?
+    - Where are you from?
+    - What do you do for a living?
+    - What is your favorite food?`,
     this.playerService.init(24000);
-    // Subscribe to connection status
+
     this.subscriptions.add(
       this.webSocketService.isConnected$.subscribe((connected) => {
         this.isConnected = connected;
@@ -58,18 +67,22 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       })
     );
 
-    // Subscribe to WebSocket messages
     this.subscriptions.add(
       this.webSocketService.messages$.subscribe(async (message) => {
-        if (message.type === 'text') {
-          const data = JSON.parse(message.data as string) as WSMessage;
-          await this.handleWSMessage(data);
-        } 
-        else if (message.type === 'binary' && this.playerService.initialized && !this.isAudioOff) {
-          this.playerService.play(new Int16Array(message.data as ArrayBuffer));
+        try {
+          if (message.type === 'text') {
+            const data = JSON.parse(message.data as string) as WSMessage;
+            await this.handleWSMessage(data);
+          } 
+          else if (message.type === 'binary' && this.playerService.initialized && !this.isAudioOff) {
+            this.playerService.play(new Int16Array(message.data as ArrayBuffer));
+          }
+        } catch (error) {
+          console.error('Error handling WebSocket message:', error);
         }
       })
     );
+
     this.scrollToBottom();
   }
 
@@ -92,7 +105,8 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       });
       await this.recorderService.start(stream);
       return true;
-    } else {
+    } 
+    else {
       this.recorderService.stop();
       return false;
     }
@@ -115,7 +129,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
           const existingMessage = this.messageMap.get(message.id);
           if (existingMessage) {
             existingMessage.content += message.delta!;
-          } 
+          }
           else {
             const newMessage: Message = {
               id: message.id,
@@ -131,7 +145,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
         if (message.action === 'connected' && message.greeting) {
           this.currentConnectingMessage!.content = message.greeting!;
           this.messages = Array.from(this.messageMap.values());
-        } 
+        }
         else if (message.action === 'speech_started') {
           this.playerService.clear();
           const contrivedId = 'userMessage' + Math.random();
@@ -150,15 +164,15 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   async handleConnect() {
     if (this.isConnected) {
       await this.disconnect();
-    } 
+    }
     else {
       this.isConnecting = true;
       try {
-        this.webSocketService.connect(this.endpoint);
-      } 
+        this.webSocketService.connect(this.endpoint, this.instructions);
+      }
       catch (error) {
         console.error('Connection failed:', error);
-      } 
+      }
       finally {
         this.isConnecting = false;
       }
@@ -202,7 +216,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     try {
       const newRecordingState = await this.handleAudioRecord(this.isRecording);
       this.isRecording = newRecordingState;
-    } 
+    }
     catch (error) {
       console.error('Recording error:', error);
       this.isRecording = false;
