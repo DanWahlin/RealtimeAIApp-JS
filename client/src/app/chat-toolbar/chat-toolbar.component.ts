@@ -1,14 +1,9 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, inject, EventEmitter, Output } from '@angular/core';
 import { PlayerService } from '@core/player.service';
 import { RecorderService } from '@core/recorder.service';
 import { WebSocketService } from '@core/web-socket.service';
+import { Message } from '@shared/interfaces';
 import { Subscription, firstValueFrom } from 'rxjs';
-
-interface Message {
-  id: string;
-  type: string;
-  content: string;
-}
 
 interface WSMessage {
   type: string;
@@ -20,19 +15,31 @@ interface WSMessage {
 }
 
 @Component({
-  selector: 'app-chat-interface',
-  templateUrl: './chat-interface.component.html',
-  styleUrls: ['./chat-interface.component.css']
+  selector: 'app-chat-toolbar',
+  templateUrl: './chat-toolbar.component.html',
+  styleUrls: ['./chat-toolbar.component.css']
 })
-export class ChatInterfaceComponent implements OnInit, OnDestroy {
+export class ChatToolbarComponent implements OnInit, OnDestroy {
   endpoint = 'ws://localhost:8080/realtime';
-  messages: Message[] = [];
   currentMessage = '';
   isRecording = false;
   isAudioOff = false;
   isConnected = false;
   isConnecting = false;
   validEndpoint = true;
+
+  @Output() messagesChanged = new EventEmitter<Message[]>();
+
+  private _messages: Message[] = [];
+  get messages(): Message[] {
+    return this._messages;
+  }
+  set messages(value: Message[]) {
+    this._messages = value;
+    this.messagesChanged.emit(value);
+  }
+
+
   messageMap = new Map<string, Message>();
   currentConnectingMessage: Message | undefined = { id: '', type: '', content: '' };
   currentUserMessage: Message | undefined = { id: '', type: '', content: '' };
@@ -43,10 +50,8 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   recorderService = inject(RecorderService);
   webSocketService = inject(WebSocketService);
 
-  @ViewChild('messagesEnd', { static: true }) messagesEndRef!: ElementRef;
-
   async ngOnInit() {
-    this.instructions = `You are a helpful spanish language coach. You read sentences in
+    this.instructions = `You are a helpful Spanish language coach. You read sentences in
     English and then read the same sentence in Spanish. The user will 
     then repeat the sentence in Spanish. You will then provide feedback.
     Examples of sentences include:
@@ -82,13 +87,6 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
         }
       })
     );
-
-    this.scrollToBottom();
-  }
-
-  ngOnDestroy(): void {
-    this.subscriptions.unsubscribe();
-    this.disconnect();
   }
 
   async handleAudioRecord(isRecording: boolean) {
@@ -110,10 +108,6 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       this.recorderService.stop();
       return false;
     }
-  }
-
-  scrollToBottom() {
-    this.messagesEndRef.nativeElement.scrollIntoView({ behavior: 'smooth' });
   }
 
   async handleWSMessage(message: WSMessage) {
@@ -230,6 +224,11 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   onInputChange(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.currentMessage = input.value || '';
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+    this.disconnect();
   }
 
 }

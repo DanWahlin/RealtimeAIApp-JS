@@ -1,0 +1,12 @@
+@if (this.showMessages) {
+    <div class="messages-container" [hidden]="!isConnected">
+        <div>
+            @for (message of messages; track message.id) {
+            <div class="message">
+                {{message.content}}
+            </div>
+            }
+            <div #messagesEnd></div>
+        </div>
+    </div>
+}

@@ -5,7 +5,6 @@ import { WebSocketServer } from "ws";
 import http from "http";
 import { pino } from "pino";
 import { RTSession } from "./session.js";
-import { stringify } from "querystring";
 
 const logger = pino({
   level: process.env.LOG_LEVEL || "debug",
