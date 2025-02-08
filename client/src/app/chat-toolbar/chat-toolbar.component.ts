@@ -1,4 +1,7 @@
-import { Component, OnInit, OnDestroy, ElementRef, ViewChild, inject, EventEmitter, Output } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, EventEmitter, Output, Input } from '@angular/core';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+
 import { PlayerService } from '@core/player.service';
 import { RecorderService } from '@core/recorder.service';
 import { WebSocketService } from '@core/web-socket.service';
@@ -17,7 +20,8 @@ interface WSMessage {
 @Component({
   selector: 'app-chat-toolbar',
   templateUrl: './chat-toolbar.component.html',
-  styleUrls: ['./chat-toolbar.component.css']
+  styleUrls: ['./chat-toolbar.component.css'],
+  imports: [ MatIconModule, MatButtonModule ]
 })
 export class ChatToolbarComponent implements OnInit, OnDestroy {
   endpoint = 'ws://localhost:8080/realtime';
@@ -27,6 +31,9 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
   isConnected = false;
   isConnecting = false;
   validEndpoint = true;
+
+  @Input() showMessageInput = true;
+  @Input() instructions = '';
 
   @Output() messagesChanged = new EventEmitter<Message[]>();
 
@@ -39,36 +46,16 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
     this.messagesChanged.emit(value);
   }
 
-
   messageMap = new Map<string, Message>();
   currentConnectingMessage: Message | undefined = { id: '', type: '', content: '' };
   currentUserMessage: Message | undefined = { id: '', type: '', content: '' };
   private subscriptions = new Subscription();
-  instructions: string = '';
 
   playerService = inject(PlayerService);
   recorderService = inject(RecorderService);
   webSocketService = inject(WebSocketService);
 
   async ngOnInit() {
-    this.instructions = `You are a helpful language coach that is capable of
-    teaching students different phrases in their chosen language. 
-
-    RULES:
-    - After the student tells you their chosen language, you will then read sentences in
-    English followed by reading the same sentence in the user's chosen language. 
-    - The user will then repeat the sentence to you in their chosen language where you'll analyze 
-    how well they did prononciation-wise, and let them know. 
-    - You will then provide feedback.
-    - If you don't clearly understand what the user is saying, please ask them
-    to repeat the statement.
-
-    EXAMPLE SENTENCES:
-    - What is your name?
-    - How are you?
-    - Where are you from?
-    - What do you do for a living?
-    - What is your favorite food?`,
     this.playerService.init(24000);
 
     this.subscriptions.add(

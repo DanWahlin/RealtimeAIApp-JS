@@ -1,0 +1,19 @@
+.medical-form {
+    padding: 20px;
+    max-width: 800px;
+  }
+  
+  .tab-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  mat-form-field {
+    width: 100%;
+  }
+  
+  :host ::ng-deep .mat-tab-body-content {
+    padding: 20px;
+  }

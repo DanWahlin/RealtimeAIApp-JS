@@ -1,0 +1,64 @@
+<app-chat-toolbar [showMessageInput]="false"></app-chat-toolbar>
+<div class="medical-form">
+    <mat-tab-group>
+      <mat-tab label="Patient Information">
+        <div class="tab-content">
+          <mat-form-field>
+            <mat-label>Patient Name</mat-label>
+            <input matInput [(ngModel)]="patient.personalInfo.name" title="Enter patient's full name">
+          </mat-form-field>
+  
+          <mat-form-field>
+            <mat-label>Date of Birth</mat-label>
+            <input matInput type="date" [(ngModel)]="patient.personalInfo.dob" title="Select patient's date of birth">
+          </mat-form-field>
+  
+          <mat-form-field>
+            <mat-label>Gender</mat-label>
+            <mat-select [(ngModel)]="patient.personalInfo.gender" title="Select patient's gender">
+              <mat-option value="male">Male</mat-option>
+              <mat-option value="female">Female</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </mat-tab>
+  
+      <mat-tab label="Symptoms">
+        <div class="tab-content">
+          <mat-form-field>
+            <mat-label>Chief Complaint</mat-label>
+            <textarea matInput [(ngModel)]="patient.symptoms.chiefComplaint" title="Describe the main reason for visit"></textarea>
+          </mat-form-field>
+  
+          <mat-form-field>
+            <mat-label>Duration</mat-label>
+            <input matInput [(ngModel)]="patient.symptoms.duration" title="Enter how long symptoms have been present">
+          </mat-form-field>
+  
+          <mat-form-field>
+            <mat-label>Severity (1-10)</mat-label>
+            <input matInput type="number" min="1" max="10" [(ngModel)]="patient.symptoms.severity" title="Rate severity from 1 (mild) to 10 (severe)">
+          </mat-form-field>
+        </div>
+      </mat-tab>
+  
+      <mat-tab label="Vital Signs">
+        <div class="tab-content">
+          <mat-form-field>
+            <mat-label>Temperature (°F)</mat-label>
+            <input matInput type="number" [(ngModel)]="patient.vitals.temperature" title="Enter patient's temperature in Fahrenheit">
+          </mat-form-field>
+  
+          <mat-form-field>
+            <mat-label>Blood Pressure</mat-label>
+            <input matInput [(ngModel)]="patient.vitals.bloodPressure" placeholder="120/80" title="Enter blood pressure in format systolic/diastolic">
+          </mat-form-field>
+  
+          <mat-form-field>
+            <mat-label>Heart Rate (BPM)</mat-label>
+            <input matInput type="number" [(ngModel)]="patient.vitals.heartRate" title="Enter heart rate in beats per minute">
+          </mat-form-field>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+</div>

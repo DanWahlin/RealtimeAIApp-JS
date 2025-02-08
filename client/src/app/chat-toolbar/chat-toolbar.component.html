@@ -24,15 +24,17 @@
             <img src="/images/speaker-off.svg" alt="Speaker Off" title="Speaker Off" class="speaker">
           }
         </span>
-        <span class="input-group">
-          <br /><br />
-          <input [value]="currentMessage" (input)="onInputChange($event)" placeholder="Type your message..."
-                 (keyup.enter)="sendMessage()" />
-                 &nbsp;&nbsp;
-          <button (click)="sendMessage()" title="Send Message">
-            Send Message
-          </button>
-        </span>
+        @if (showMessageInput) {
+          <span class="input-group">
+            <br /><br />
+            <input [value]="currentMessage" (input)="onInputChange($event)" placeholder="Type your message..."
+                  (keyup.enter)="sendMessage()" />
+                  &nbsp;&nbsp;
+            <button (click)="sendMessage()" title="Send Message">
+              Send Message
+            </button>
+          </span>
+        }
       </span>
     }
 </div>
