@@ -66,25 +66,32 @@ export class MedicalCoachComponent {
   private generateSchemaFromObject(obj: any): any {
     const schema: any = {
       type: 'object',
+      required: [], // Add required fields
       properties: {}
     };
-
+  
     Object.keys(obj).forEach(key => {
       const value = obj[key];
+      schema.required.push(key); // Mark all properties as required
+  
       if (Array.isArray(value)) {
         schema.properties[key] = {
           type: 'array',
-          items: this.generateSchemaFromObject(value[0])
+          items: this.generateSchemaFromObject(value[0]),
+          minItems: 1 // Ensure at least one item in arrays
         };
-      } else if (typeof value === 'object') {
+      } else if (typeof value === 'object' && value !== null) {
         schema.properties[key] = this.generateSchemaFromObject(value);
       } else {
         schema.properties[key] = {
-          type: typeof value
+          type: typeof value,
+          // Add specific constraints based on type
+          ...(typeof value === 'number' && { minimum: 0 }),
+          ...(typeof value === 'string' && { minLength: 1 })
         };
       }
     });
-
+  
     return schema;
   }
 

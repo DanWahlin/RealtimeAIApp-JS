@@ -65,17 +65,6 @@ export class RTSession {
   private readonly sessionId: string;
   private logger: Logger;
   private instructions: string;
-  private modelDescription = 'Patient diagnosis form';
-  private jsonSchema = {
-    type: 'object',
-    properties: {
-      name: { type: 'string' },
-      age: { type: 'number' },
-      diagnosis: { type: 'string' },
-      treatment: { type: 'string' },
-    },
-    required: ['name', 'age', 'diagnosis', 'treatment'],
-  };
 
   constructor(ws: WebSocket, logger: Logger, instructions: string) {
     this.sessionId = crypto.randomUUID();
@@ -103,7 +92,10 @@ export class RTSession {
         threshold: 0.4,
         silence_duration_ms: 600,
         type: 'server_vad',
-      }
+      },
+      tools: [
+        
+      ]
     });
 
     this.logger.debug('Realtime session configured successfully');
