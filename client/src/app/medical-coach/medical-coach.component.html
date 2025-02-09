@@ -1,21 +1,21 @@
 <app-chat-toolbar [showMessageInput]="false"></app-chat-toolbar>
 <div class="medical-form">
-    <mat-tab-group>
-      <mat-tab label="Patient Information">
+    <mat-tab-group [selectedIndex]="selectedTabIndex" (selectedIndexChange)="onTabChanged($event)">
+      <mat-tab label="Patient">
         <div class="tab-content">
           <mat-form-field>
-            <mat-label>Patient Name</mat-label>
-            <input matInput [(ngModel)]="patient.personalInfo.name" title="Enter patient's full name">
+            <mat-label>Name</mat-label>
+            <input matInput [(ngModel)]="patient.patientInfo.name" title="Enter patient's full name">
           </mat-form-field>
   
           <mat-form-field>
             <mat-label>Date of Birth</mat-label>
-            <input matInput type="date" [(ngModel)]="patient.personalInfo.dob" title="Select patient's date of birth">
+            <input matInput type="date" [(ngModel)]="patient.patientInfo.dob" title="Select patient's date of birth">
           </mat-form-field>
   
           <mat-form-field>
             <mat-label>Gender</mat-label>
-            <mat-select [(ngModel)]="patient.personalInfo.gender" title="Select patient's gender">
+            <mat-select [(ngModel)]="patient.patientInfo.gender" title="Select patient's gender">
               <mat-option value="male">Male</mat-option>
               <mat-option value="female">Female</mat-option>
             </mat-select>
@@ -25,24 +25,45 @@
   
       <mat-tab label="Symptoms">
         <div class="tab-content">
-          <mat-form-field>
-            <mat-label>Chief Complaint</mat-label>
-            <textarea matInput [(ngModel)]="patient.symptoms.chiefComplaint" title="Describe the main reason for visit"></textarea>
-          </mat-form-field>
-  
-          <mat-form-field>
-            <mat-label>Duration</mat-label>
-            <input matInput [(ngModel)]="patient.symptoms.duration" title="Enter how long symptoms have been present">
-          </mat-form-field>
-  
-          <mat-form-field>
-            <mat-label>Severity (1-10)</mat-label>
-            <input matInput type="number" min="1" max="10" [(ngModel)]="patient.symptoms.severity" title="Rate severity from 1 (mild) to 10 (severe)">
-          </mat-form-field>
+          @for (symptom of patient.symptoms; track symptom; let i = $index) {
+            <div class="symptom-group">
+              <mat-form-field>
+                <mat-label>Symptom Description</mat-label>
+                <textarea matInput [(ngModel)]="symptom.description" 
+                  title="Describe the symptom"></textarea>
+              </mat-form-field>
+      
+              <mat-form-field>
+                <mat-label>Duration</mat-label>
+                <input matInput [(ngModel)]="symptom.duration" 
+                  title="Enter how long symptom has been present">
+              </mat-form-field>
+      
+              <mat-form-field>
+                <mat-label>Severity (1-10)</mat-label>
+                <input matInput type="number" min="1" max="10" 
+                  [(ngModel)]="symptom.severity" 
+                  title="Rate severity from 1 (mild) to 10 (severe)">
+              </mat-form-field>
+      
+              <button mat-icon-button color="warn" 
+                (click)="removeSymptom(i)" 
+                [disabled]="patient.symptoms.length === 1"
+                title="Remove this symptom">
+                <mat-icon>remove_circle</mat-icon>
+              </button>
+            </div>
+          }
+      
+          <div class="add-symptom">
+            <button mat-button color="primary" (click)="addSymptom()">
+              <mat-icon>add</mat-icon> Add Another Symptom
+            </button>
+          </div>
         </div>
       </mat-tab>
   
-      <mat-tab label="Vital Signs">
+      <mat-tab label="Vitals">
         <div class="tab-content">
           <mat-form-field>
             <mat-label>Temperature (°F)</mat-label>
