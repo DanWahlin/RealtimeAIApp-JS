@@ -94,7 +94,17 @@ export class RTSession {
         type: 'server_vad',
       },
       tools: [
-        
+        {
+          type: 'function',
+          name: 'get_json_object',
+          description: 'Converts text into a JSON object based upon a JSON schema',
+          parameters: {
+            type: 'object',
+            properties: {
+              
+            }
+          }
+        }
       ]
     });
 

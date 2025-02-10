@@ -8,14 +8,21 @@ import { MatSelectModule } from '@angular/material/select';
 import { ChatToolbarComponent } from '../chat-toolbar/chat-toolbar.component';
 import { MatIconModule } from '@angular/material/icon';
 
+enum PatientTab {
+  Patient = 'Patient',
+  Symptoms = 'Symptoms',
+  Vitals = 'Vitals'
+}
+
 interface Patient {
-  tab: 'Patient' | 'Symptoms' | 'Vitals';
-  patientInfo: {
+  tab: string;
+  information: {
     name: string;
     dob: string;
     gender: string;
   };
   symptoms: {
+    id: number;
     description: string;
     duration: string;
     severity: number;
@@ -43,14 +50,12 @@ interface Patient {
   styleUrl: './medical-coach.component.css'
 })
 export class MedicalCoachComponent {
-  patient: Patient = {
-    tab: 'Patient',
-    patientInfo: { name: '', dob: '', gender: '' },
-    symptoms: [{ description: '', duration: '', severity: 1 }],
-    vitals: { temperature: 98.6, bloodPressure: '', heartRate: 0 }
-  };
+  patient: Patient;
+  selectedTabIndex = 0;
+  private nextSymptomId = 1;
   private tabs = ['Patient', 'Symptoms', 'Vitals'];
-  private jsonSchema = this.generateSchemaFromObject(this.patient);
+  private jsonSchema: any = {};
+  private debounceTimer: any;
   instructions = `You are helping to edit a JSON object that represents a medical patient's personal information, symptoms, and vitals.
     This JSON object conforms to the following schema: 
     
@@ -62,6 +67,38 @@ export class MedicalCoachComponent {
     Even if you think the information is incorrect, accept it - do not try to correct mistakes.
     After each time you have called the JSON updating tool, just reply OK.
   `;
+
+  constructor() {
+    this.patient = this.createProxy({
+      tab: PatientTab.Patient,
+      information: { name: '', dob: '', gender: '' },
+      symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1 }],
+      vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
+    });
+    this.generateSchemaFromObject(this.patient);
+  }
+
+  private onPatientChanged() {
+    // Send to server via WebSocket
+    console.log('Patient data changed:', JSON.parse(JSON.stringify(this.patient)));
+  }
+
+  onTabChanged(tabIndex: any): void {
+    this.patient.tab = PatientTab[this.tabs[tabIndex] as keyof typeof PatientTab];
+    console.log(this.patient.tab);
+    this.selectedTabIndex = tabIndex;
+  }
+
+  addSymptom() {
+    this.patient.symptoms.push({ id: this.nextSymptomId++, description: '', duration: '', severity: 1 });
+  }
+
+  removeSymptom(id: number) {
+    this.patient.symptoms.splice(id - 1, 1);
+    if (this.patient.symptoms.length === 0) {
+      this.nextSymptomId = 1;
+    }
+  }
 
   private generateSchemaFromObject(obj: any): any {
     const schema: any = {
@@ -95,19 +132,23 @@ export class MedicalCoachComponent {
     return schema;
   }
 
-  get selectedTabIndex(): number {
-    return this.tabs.indexOf(this.patient.tab);
+  private createProxy<T extends object>(obj: T): T {
+    return new Proxy(obj, {
+      get: (target, prop, receiver) => {
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === 'object' && value !== null
+          ? this.createProxy(value) // Recursively wrap nested objects
+          : value;
+      },
+      set: (target, prop, value) => {
+        Reflect.set(target, prop, value);
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => {
+          this.onPatientChanged();
+        }, 500); // Adjust delay as needed
+        return true;
+      }
+    });
   }
 
-  onTabChanged(event: any): void {
-    this.patient.tab = this.tabs[event.index] as Patient['tab'];
-  }
-
-  addSymptom() {
-    this.patient.symptoms.push({ description: '', duration: '', severity: 1 });
-  }
-
-  removeSymptom(index: number) {
-    this.patient.symptoms.splice(index, 1);
-  }
 }
