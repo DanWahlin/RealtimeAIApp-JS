@@ -35,7 +35,7 @@ interface Patient {
 }
 
 @Component({
-  selector: 'app-medical-coach',
+  selector: 'app-medical-form',
   imports: [
     CommonModule,
     FormsModule,
@@ -46,10 +46,10 @@ interface Patient {
     MatSelectModule,
     ChatToolbarComponent
   ],
-  templateUrl: './medical-coach.component.html',
-  styleUrl: './medical-coach.component.css'
+  templateUrl: './medical-form.component.html',
+  styleUrl: './medical-form.component.css'
 })
-export class MedicalCoachComponent {
+export class MedicalFormComponent {
   patient: Patient;
   selectedTabIndex = 0;
   private nextSymptomId = 1;
