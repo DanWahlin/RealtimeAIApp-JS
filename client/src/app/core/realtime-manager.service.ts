@@ -2,17 +2,8 @@ import { Injectable, OnDestroy, inject } from '@angular/core';
 import { WebSocketService } from '@core/web-socket.service';
 import { PlayerService } from '@core/player.service';
 import { RecorderService } from '@core/recorder.service';
-import { Message } from '@shared/interfaces';
+import { Message, WSMessage } from '@shared/interfaces';
 import { Subscription, firstValueFrom, BehaviorSubject } from 'rxjs';
-
-interface WSMessage {
-  type: string;
-  id?: string;
-  text?: string;
-  delta?: string;
-  action?: string;
-  greeting?: string;
-}
 
 @Injectable({
   providedIn: 'root'

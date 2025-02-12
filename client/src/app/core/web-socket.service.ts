@@ -1,10 +1,6 @@
 import { Injectable } from '@angular/core';
+import { WebSocketMessage } from '@shared/interfaces';
 import { BehaviorSubject, Subject } from 'rxjs';
-
-interface WebSocketMessage {
-  type: 'binary' | 'text' | 'init';
-  data: ArrayBuffer | string;
-}
 
 @Injectable({
   providedIn: 'root',
