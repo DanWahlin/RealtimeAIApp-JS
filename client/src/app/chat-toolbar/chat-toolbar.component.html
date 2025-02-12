@@ -6,8 +6,10 @@
           ? "Disconnect"
           : "Connect" }}
   </button>
+
   @if (realtimeManagerService.isConnected$ | async) {
   <span class="chat-toolbar">
+    
       <span (click)="toggleRecording()">
         @if (realtimeManagerService.isRecording$ | async) {
           <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">
@@ -16,6 +18,7 @@
           <img src="/images/microphone-off.svg" alt="Mic Off" title="Mic Off" class="microphone">
         }
       </span>
+
       <span (click)="toggleAudio()">
         @if (realtimeManagerService.isAudioOn$ | async) {
           <img src="/images/speaker-on.svg" alt="Speaker On" title="Speaker On" class="speaker">
@@ -24,6 +27,7 @@
           <img src="/images/speaker-off.svg" alt="Speaker Off" title="Speaker Off" class="speaker">
         }
       </span>
+
       @if (showMessageInput) {
         <span class="input-group">
           <br /><br />
@@ -37,4 +41,5 @@
       }
     </span>
   }
+
 </div>
