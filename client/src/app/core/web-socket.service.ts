@@ -11,9 +11,17 @@ interface WebSocketMessage {
 })
 export class WebSocketService implements AsyncIterable<WebSocketMessage> {
   private socket: WebSocket | null = null;
-  private messageSubject = new Subject<WebSocketMessage>();
-  private connectedSubject = new BehaviorSubject<boolean>(false);
-  private errorSubject = new Subject<Error>();
+
+  private _message = new Subject<WebSocketMessage>();
+  messages$ = this._message.asObservable();
+  
+  private _isConnected = new BehaviorSubject<boolean>(false);
+  isConnected$ = this._isConnected.asObservable();
+  
+  private _errors = new Subject<Error>();
+  errors$ = this._errors.asObservable();
+
+
   private messageQueue: WebSocketMessage[] = [];
   private hasError = false;
 
@@ -24,13 +32,13 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
     this.socket.binaryType = 'arraybuffer';
 
     this.socket.onopen = () => {
-      this.connectedSubject.next(true);
+      this._isConnected.next(true);
       this.send({ 
         type: 'text', 
         data: JSON.stringify({ type: 'init', instructions })
       });
     };
-    this.socket.onclose = () => this.connectedSubject.next(false);
+    this.socket.onclose = () => this._isConnected.next(false);
     this.socket.onerror = (event: Event) => {
       const error = (event as ErrorEvent).error || new Error('WebSocket error');
       this.handleError(error);
@@ -42,19 +50,19 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
         data: event.data
       };
       this.messageQueue.push(message);
-      this.messageSubject.next(message);
+      this._message.next(message);
     };
   }
 
   private handleError(error: Error) {
     this.hasError = true;
-    this.errorSubject.next(error);
+    this._errors.next(error);
   }
 
   async *[Symbol.asyncIterator](): AsyncIterator<WebSocketMessage> {
     while (true) {
       if (this.hasError) {
-        throw this.errorSubject;
+        throw this._errors;
       }
       if (this.messageQueue.length > 0) {
         yield this.messageQueue.shift()!;
@@ -74,8 +82,4 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
     this.socket?.close();
     this.socket = null;
   }
-
-  get messages$() { return this.messageSubject.asObservable(); }
-  get isConnected$() { return this.connectedSubject.asObservable(); }
-  get errors$() { return this.errorSubject.asObservable(); }
 }

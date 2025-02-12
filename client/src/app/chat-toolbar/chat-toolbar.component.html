@@ -1,40 +1,40 @@
 <div class="controls-container">
-    <button (click)="handleConnect()" [disabled]="isConnecting" title="Connect">
-        {{isConnecting
-        ? "Connecting..."
-        : isConnected
-        ? "Disconnect"
-        : "Connect"}}
-    </button>
-    @if (isConnected) {
-    <span class="chat-toolbar">
-        <span (click)="toggleRecording()">
-          @if (isRecording) {
-            <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">
-          }
-          @else {
-            <img src="/images/microphone-off.svg" alt="Mic Off" title="Mic Off" class="microphone">
-          }
-        </span>
-        <span (click)="toggleAudio()">
-          @if (!isAudioOff) {
-            <img src="/images/speaker-on.svg" alt="Speaker On" title="Speaker On" class="speaker">
-          }
-          @else {
-            <img src="/images/speaker-off.svg" alt="Speaker Off" title="Speaker Off" class="speaker">
-          }
-        </span>
-        @if (showMessageInput) {
-          <span class="input-group">
-            <br /><br />
-            <input [value]="currentMessage" (input)="onInputChange($event)" placeholder="Type your message..."
-                  (keyup.enter)="sendMessage()" />
-                  &nbsp;&nbsp;
-            <button (click)="sendMessage()" title="Send Message">
-              Send Message
-            </button>
-          </span>
+  <button (click)="connect()" [disabled]="(realtimeManagerService.isConnecting$ | async)!" title="Connect">
+      {{ (realtimeManagerService.isConnecting$ | async)
+          ? "Connecting..."
+          : (realtimeManagerService.isConnected$ | async)
+          ? "Disconnect"
+          : "Connect" }}
+  </button>
+  @if (realtimeManagerService.isConnected$ | async) {
+  <span class="chat-toolbar">
+      <span (click)="toggleRecording()">
+        @if (realtimeManagerService.isRecording$ | async) {
+          <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">
+        }
+        @else {
+          <img src="/images/microphone-off.svg" alt="Mic Off" title="Mic Off" class="microphone">
         }
       </span>
-    }
+      <span (click)="toggleAudio()">
+        @if (realtimeManagerService.isAudioOn$ | async) {
+          <img src="/images/speaker-on.svg" alt="Speaker On" title="Speaker On" class="speaker">
+        }
+        @else {
+          <img src="/images/speaker-off.svg" alt="Speaker Off" title="Speaker Off" class="speaker">
+        }
+      </span>
+      @if (showMessageInput) {
+        <span class="input-group">
+          <br /><br />
+          <input [value]="currentMessage" (input)="onInputChange($event)" placeholder="Type your message..."
+                (keyup.enter)="sendMessage()" />
+                &nbsp;&nbsp;
+          <button (click)="sendMessage()" title="Send Message">
+            Send Message
+          </button>
+        </span>
+      }
+    </span>
+  }
 </div>

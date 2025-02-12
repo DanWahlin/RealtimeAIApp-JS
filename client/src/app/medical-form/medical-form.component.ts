@@ -80,7 +80,7 @@ export class MedicalFormComponent {
 
   private onPatientChanged() {
     // Send to server via WebSocket
-    console.log('Patient data changed:', JSON.parse(JSON.stringify(this.patient)));
+    
   }
 
   onTabChanged(tabIndex: any): void {

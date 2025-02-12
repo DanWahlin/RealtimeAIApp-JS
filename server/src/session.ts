@@ -183,7 +183,8 @@ export class RTSession {
       else {
         await this.handleTextMessage(message);
       }
-    } catch (error) {
+    } 
+    catch (error) {
       this.logger.error({ error }, 'Error handling message');
     }
   }
