@@ -195,7 +195,7 @@ export class RealTimeManagerService implements OnDestroy {
   }
 
   async sendMessage(content: string) {
-    if (content.trim() && await firstValueFrom(this.isConnected$)) {
+    if (content && await firstValueFrom(this.isConnected$)) {
       const messageId = `user-${Date.now()}`;
       const newMessage: Message = {
         id: messageId,
@@ -203,7 +203,6 @@ export class RealTimeManagerService implements OnDestroy {
         content: content,
       };
       this._messages.next([...this._messages.value, newMessage]);
-
       await this.webSocketService.send({
         type: 'text',
         data: JSON.stringify({

@@ -10,7 +10,6 @@ import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity'
 import { AzureKeyCredential } from '@azure/core-auth';
 import { Logger } from 'pino';
 import { config } from "dotenv";
-import { StringDecoder } from 'string_decoder';
 config({ path: '../.env' });
 
 interface TextDelta {
@@ -60,7 +59,7 @@ const {
 } = process.env as Record<string, string>;
 
 export class RTSession {
-  private client!: RTClient;
+  private rtClient!: RTClient;
   private ws: WebSocket;
   private readonly sessionId: string;
   private logger: Logger;
@@ -76,11 +75,11 @@ export class RTSession {
   }
 
   async initialize() {
-    this.client = this.initializeClient();
+    this.rtClient = this.initializeClient();
     this.setupEventHandlers();
     this.logger.info('New session created');
     this.logger.debug('Configuring realtime session');
-    await this.client.configure({
+    await this.rtClient.configure({
       instructions: this.instructions,
       modalities: ['text', 'audio'],
       voice: 'alloy',
@@ -191,7 +190,7 @@ export class RTSession {
 
   private async handleBinaryMessage(message: Buffer) {
     try {
-      await this.client.sendAudio(new Uint8Array(message));
+      await this.rtClient.sendAudio(new Uint8Array(message));
     } 
     catch (error) {
       this.logger.error({ error }, 'Failed to send audio data');
@@ -207,12 +206,12 @@ export class RTSession {
 
     if (parsed.type === 'user_message') {
       try {
-        await this.client.sendItem({
+        await this.rtClient.sendItem({
           type: 'message',
           role: 'user',
           content: [{ type: 'input_text', text: parsed.text }],
         });
-        await this.client.generateResponse();
+        await this.rtClient.generateResponse();
         this.logger.debug('User message processed successfully');
       } catch (error) {
         this.logger.error({ error }, 'Failed to process user message');
@@ -224,7 +223,7 @@ export class RTSession {
   private async handleClose() {
     this.logger.info('Session closing');
     try {
-      await this.client.close();
+      await this.rtClient.close();
       this.logger.info('Session closed successfully');
     } catch (error) {
       this.logger.error({ error }, 'Error closing session');
@@ -318,7 +317,7 @@ export class RTSession {
   private async startEventLoop() {
     try {
       this.logger.debug('Starting event loop');
-      for await (const event of this.client.events()) {
+      for await (const event of this.rtClient.events()) {
         if (event.type === 'response') {
           this.logger.debug('Event loop handling response');
           await this.handleResponse(event);
