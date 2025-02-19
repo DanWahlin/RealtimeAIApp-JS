@@ -1,5 +1,6 @@
 import { WebSocket } from 'ws';
 import {
+  isFunctionCallItem,
   RTClient,
   RTResponse,
   RTInputAudioItem,
@@ -78,7 +79,6 @@ export class RTSession {
     this.rtClient = this.initializeClient();
     this.setupEventHandlers();
     this.logger.info('New session created');
-    this.logger.debug('Configuring realtime session');
     await this.rtClient.configure({
       instructions: this.instructions,
       modalities: ['text', 'audio'],
@@ -100,21 +100,52 @@ export class RTSession {
           parameters: {
             type: 'object',
             properties: {
-              
-            }
+              tab: { type: 'string' },
+              information: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  dob: { type: 'string' },
+                  gender: { type: 'string' }
+                },
+                required: ['name', 'dob', 'gender']
+              },
+              symptoms: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'number' },
+                    description: { type: 'string' },
+                    duration: { type: 'string' },
+                    severity: { type: 'number' }
+                  },
+                  required: ['id', 'description', 'duration', 'severity']
+                }
+              },
+              vitals: {
+                type: 'object',
+                properties: {
+                  temperature: { type: 'number' },
+                  bloodPressure: { type: 'string' },
+                  heartRate: { type: 'number' }
+                },
+                required: ['temperature', 'bloodPressure', 'heartRate']
+              }
+            },
+            required: ['tab', 'information', 'symptoms', 'vitals']
           }
         }
       ]
     });
 
-    this.logger.debug('Realtime session configured successfully');
-    /* Send greeting */
-    const greeting: Connected = {
-      type: 'control',
-      action: 'connected',
-      greeting: 'You are now connected to the a expressjs server',
-    };
-    this.send(greeting);
+    // Send greeting
+    // const greeting: Connected = {
+    //   type: 'control',
+    //   action: 'connected',
+    //   greeting: 'You are now connected to the expressjs server',
+    // };
+    // this.send(greeting);
     this.logger.debug('Realtime session configured successfully');
     this.startEventLoop();
   }
@@ -202,7 +233,7 @@ export class RTSession {
     const messageString = message.toString('utf-8');
     const parsed: WSMessage = JSON.parse(messageString);
 
-    this.logger.debug({ messageType: parsed.type }, 'Received text message');
+    this.logger.debug({ parsed }, 'Received text message');
 
     if (parsed.type === 'user_message') {
       try {
@@ -286,7 +317,7 @@ export class RTSession {
           }
         }
       }
-      this.logger.debug('Response handled successfully');
+      this.logger.debug('Response handled successfully'); 
     } catch (error) {
       this.logger.error({ error }, 'Error handling response');
       throw error;

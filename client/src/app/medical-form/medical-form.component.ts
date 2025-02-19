@@ -90,5 +90,33 @@ export class MedicalFormComponent implements OnInit {
       this.nextSymptomId = 1;
     }
   }
+
+  private updateModelProperties(oldModel: any, newModel: any): boolean {
+    let foundChange = false;
+  
+    for (const key of Object.keys(oldModel)) {
+      const oldValue = oldModel[key];
+      const newValue = newModel[key];
+  
+      if (this.isComplexType(oldValue)) {
+        foundChange = this.updateModelProperties(oldValue, newValue) || foundChange;
+      } else if (oldValue !== newValue) {
+        oldModel[key] = newValue;
+        this.notifyFieldChanged(oldModel, key);
+        foundChange = true;
+      }
+    }
+  
+    return foundChange;
+  }
+  
+  private isComplexType(value: any): boolean {
+    return value && typeof value === 'object' && !Array.isArray(value);
+  }
+  
+  private notifyFieldChanged(model: any, fieldName: string): void {
+    // Implement the logic to notify field change
+    console.log(`Field changed: ${fieldName} in model`, model);
+  }
   
 }
