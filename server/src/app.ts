@@ -1,15 +1,13 @@
-//Based on https://learn.microsoft.com/en-us/azure/ai-services/openai/realtime-audio-quickstart?pivots=programming-language-javascript
-
-import express from "express";
-import { WebSocketServer } from "ws";
-import http from "http";
-import { pino } from "pino";
-import { RTSession } from "./session.js";
+import express from 'express';
+import { WebSocketServer } from 'ws';
+import http from 'http';
+import { pino } from 'pino';
+import { RTSession } from './session.js';
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || "debug",
+  level: process.env.LOG_LEVEL || 'debug',
   transport: {
-    target: "pino-pretty",
+    target: 'pino-pretty',
     options: {
       colorize: true,
     },
@@ -20,22 +18,22 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
-server.on("upgrade", (request, socket, head) => {
+server.on('upgrade', (request, socket, head) => {
   const { pathname } = new URL(request.url!, `http://${request.headers.host}`);
-  if (pathname === "/realtime") {
-    logger.debug({ pathname }, "Handling WebSocket upgrade request");
+  if (pathname === '/realtime') {
+    logger.debug({ pathname }, 'Handling WebSocket upgrade request');
     wss.handleUpgrade(request, socket, head, (ws) => {
-      logger.debug("WebSocket upgrade successful");
-      wss.emit("connection", ws, request);
+      logger.debug('WebSocket upgrade successful');
+      wss.emit('connection', ws, request);
     });
   } else {
-    logger.warn({ pathname }, "Invalid WebSocket path - destroying connection");
+    logger.warn({ pathname }, 'Invalid WebSocket path - destroying connection');
     socket.destroy();
   }
 });
 
-wss.on("connection", (ws) => {
-  logger.info("New WebSocket connection established");
+wss.on('connection', (ws) => {
+  logger.info('New WebSocket connection established');
 
   const handleMessage = (message: any) => {
     if (!message) {
@@ -59,10 +57,10 @@ wss.on("connection", (ws) => {
     }
   };
 
-  ws.on("message", handleMessage);
+  ws.on('message', handleMessage);
 
-  ws.on("close", () => {
-    logger.info("WebSocket connection closed");
+  ws.on('close', () => {
+    logger.info('WebSocket connection closed');
   });
 });
 

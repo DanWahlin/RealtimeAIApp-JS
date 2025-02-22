@@ -1,366 +1,168 @@
-import { WebSocket } from 'ws';
-import {
-  isFunctionCallItem,
-  RTClient,
-  RTResponse,
-  RTInputAudioItem,
-  RTTextContent,
-  RTAudioContent,
-} from 'rt-client';
-import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
-import { AzureKeyCredential } from '@azure/core-auth';
+import { WebSocket, RawData } from 'ws';
 import { Logger } from 'pino';
-import { config } from "dotenv";
+import { DefaultAzureCredential } from '@azure/identity';
+import { config } from 'dotenv';
+import * as crypto from 'crypto';
 config({ path: '../.env' });
 
-interface TextDelta {
-  id: string;
-  type: 'text_delta';
-  delta: string;
-}
-
-interface Transcription {
-  id?: string;
-  type: 'transcription';
-  text: string;
-}
-
-interface UserMessage {
-  id: string;
-  type: 'user_message';
-  text: string;
-}
-
-interface SpeechStarted {
-  type: 'control';
-  action: 'speech_started';
-}
-
-interface Connected {
-  type: 'control';
-  action: 'connected';
-  greeting: string;
-}
-
-interface TextDone {
-  type: 'control';
-  action: 'text_done';
-  id: string;
-}
-
-type ControlMessage = SpeechStarted | Connected | TextDone;
-
-type WSMessage = TextDelta | Transcription | UserMessage | ControlMessage;
+// Simplified message types using discriminated unions
+type WSMessage =
+  | { id: string; type: 'text_delta'; delta: string }
+  | { id?: string; type: 'transcription'; text: string }
+  | { id: string; type: 'user_message'; text: string }
+  | { type: 'control'; action: 'speech_started' | 'connected' | 'text_done'; greeting?: string; id?: string };
 
 const {
-  BACKEND,
+  BACKEND = 'openai', // Default to OpenAI if not set
   OPENAI_API_KEY,
   OPENAI_ENDPOINT,
-  OPENAI_DEPLOYMENT
+  OPENAI_DEPLOYMENT,
 } = process.env as Record<string, string>;
 
-export class RTSession {
-  private rtClient!: RTClient;
-  private ws: WebSocket;
-  private readonly sessionId: string;
-  private logger: Logger;
-  private instructions: string;
+// Session configuration (extracted for reusability and clarity)
+const SESSION_CONFIG = {
+  modalities: ['text', 'audio'],
+  voice: 'alloy',
+  input_audio_format: 'pcm16',
+  input_audio_transcription: { model: 'whisper-1' },
+  turn_detection: { type: 'server_vad', threshold: 0.4, silence_duration_ms: 600 },
+  tools: [
+    {
+      type: 'function',
+      name: 'get_json_object',
+      description: 'Converts text into a JSON object based upon a JSON schema',
+      parameters: {
+        type: 'object',
+        properties: {
+          tab: { type: 'string' },
+          information: { type: 'object', properties: { name: { type: 'string' }, dob: { type: 'string' }, gender: { type: 'string' } }, required: ['name', 'dob', 'gender'] },
+          symptoms: { type: 'array', items: { type: 'object', properties: { id: { type: 'number' }, description: { type: 'string' }, duration: { type: 'string' }, severity: { type: 'number' } }, required: ['id', 'description', 'duration', 'severity'] } },
+          vitals: { type: 'object', properties: { temperature: { type: 'number' }, bloodPressure: { type: 'string' }, heartRate: { type: 'number' } }, required: ['temperature', 'bloodPressure', 'heartRate'] },
+        },
+        required: ['tab', 'information', 'symptoms', 'vitals'],
+      },
+    },
+  ],
+  tool_choice: 'auto',
+};
 
-  constructor(ws: WebSocket, logger: Logger, instructions: string) {
-    this.sessionId = crypto.randomUUID();
-    this.ws = ws;
+export class RTSession {
+  private readonly sessionId = crypto.randomUUID();
+  private readonly logger: Logger;
+
+  constructor(
+    private readonly ws: WebSocket,
+    logger: Logger,
+    private readonly instructions: string,
+    private readonly realtimeWs = new WebSocket('', { headers: {} }) // Placeholder, initialized asynchronously
+  ) {
     this.logger = logger.child({ sessionId: this.sessionId });
-    this.instructions = instructions;
-    logger.info({ instructions }, 'Instructions received');
-    this.initialize();
+    this.logger.info({ instructions }, 'Instructions received');
+    this.initialize().catch((error) => this.logger.error({ error }, 'Failed to initialize session'));
   }
 
-  async initialize() {
-    this.rtClient = this.initializeClient();
+  private async initialize() {
+    Object.assign(this.realtimeWs, await this.initializeRealtimeWebSocket());
     this.setupEventHandlers();
     this.logger.info('New session created');
-    await this.rtClient.configure({
-      instructions: this.instructions,
-      modalities: ['text', 'audio'],
-      voice: 'alloy',
-      input_audio_format: 'pcm16',
-      input_audio_transcription: {
-        model: 'whisper-1',
-      },
-      turn_detection: {
-        threshold: 0.4,
-        silence_duration_ms: 600,
-        type: 'server_vad',
-      },
-      tools: [
-        {
-          type: 'function',
-          name: 'get_json_object',
-          description: 'Converts text into a JSON object based upon a JSON schema',
-          parameters: {
-            type: 'object',
-            properties: {
-              tab: { type: 'string' },
-              information: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  dob: { type: 'string' },
-                  gender: { type: 'string' }
-                },
-                required: ['name', 'dob', 'gender']
-              },
-              symptoms: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'number' },
-                    description: { type: 'string' },
-                    duration: { type: 'string' },
-                    severity: { type: 'number' }
-                  },
-                  required: ['id', 'description', 'duration', 'severity']
-                }
-              },
-              vitals: {
-                type: 'object',
-                properties: {
-                  temperature: { type: 'number' },
-                  bloodPressure: { type: 'string' },
-                  heartRate: { type: 'number' }
-                },
-                required: ['temperature', 'bloodPressure', 'heartRate']
-              }
-            },
-            required: ['tab', 'information', 'symptoms', 'vitals']
-          }
-        }
-      ]
-    });
+  }
 
-    // Send greeting
-    // const greeting: Connected = {
-    //   type: 'control',
-    //   action: 'connected',
-    //   greeting: 'You are now connected to the expressjs server',
-    // };
-    // this.send(greeting);
-    this.logger.debug('Realtime session configured successfully');
-    this.startEventLoop();
+  private initializeRealtimeWebSocket(): Promise<WebSocket> {
+    const url = BACKEND === 'azure'
+      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=2024-10-01-preview`
+      : 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01';
+
+    return new Promise(async (resolve, reject) => {
+      const headers = await this.getWebSocketHeaders();
+      const ws = new WebSocket(url, { headers });
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ type: 'session.update', session: { instructions: this.instructions, ...SESSION_CONFIG } }));
+        this.send({ type: 'control', action: 'connected', greeting: 'Connected to OpenAI Realtime API' });
+        resolve(ws);
+      });
+      ws.on('error', reject);
+    });
+  }
+
+  private async getWebSocketHeaders(): Promise<{ [key: string]: string }> {
+    if (BACKEND === 'azure') {
+      const token = await new DefaultAzureCredential().getToken('https://cognitiveservices.azure.com/.default');
+      if (!token?.token) throw new Error('Failed to retrieve Azure access token');
+      this.logger.debug('Azure access token retrieved successfully');
+      return { Authorization: `Bearer ${token.token}`, 'OpenAI-Beta': 'realtime=v1' };
+    }
+    return { Authorization: `Bearer ${OPENAI_API_KEY}`, 'OpenAI-Beta': 'realtime=v1' };
   }
 
   private send(message: WSMessage) {
-    this.ws.send(JSON.stringify(message));
+    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message));
   }
 
   private sendBinary(message: ArrayBuffer) {
-    this.ws.send(Buffer.from(message), { binary: true });
-  }
-
-  private initializeClient(): RTClient {
-    this.logger.info(`Initializing RT client for backend: ${BACKEND}`);
-  
-    try {
-      if (BACKEND === 'azure') {
-        const credential = new DefaultAzureCredential();
-        this.logger.info('DefaultAzureCredential created');
-  
-        // Log the environment variables to ensure they are set correctly
-        this.logger.info({
-          OPENAI_API_KEY,
-          OPENAI_ENDPOINT,
-          OPENAI_DEPLOYMENT
-        }, 'Environment variables');
-  
-        // Attempt to acquire a token and log the result
-        credential.getToken("https://cognitiveservices.azure.com/.default").then(token => {
-          this.logger.debug('Token acquired', { token });
-        }).catch(error => {
-          this.logger.error('Error acquiring token', { error });
-        });
-  
-        return new RTClient(
-          new URL(OPENAI_ENDPOINT!),
-          new DefaultAzureCredential(),
-          { deployment: OPENAI_DEPLOYMENT! },
-        );
-      }
-      return new RTClient(new AzureKeyCredential(OPENAI_API_KEY!), {
-        model: OPENAI_DEPLOYMENT!,
-      });
-    } catch (error) {
-      this.logger.error({ error }, 'Error initializing RT client');
-      throw error;
-    }
+    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.from(message), { binary: true });
   }
 
   private setupEventHandlers() {
-    this.logger.debug('Client configured successfully');
+    this.ws.on('message', (data: RawData, isBinary) => this.handleClientMessage(data, isBinary));
+    this.ws.on('close', () => this.close());
+    this.ws.on('error', (error) => this.logger.error({ error }, 'Client WebSocket error'));
 
-    this.ws.on('message', this.handleMessage.bind(this));
-    this.ws.on('close', this.handleClose.bind(this));
-    this.ws.on('error', (error) => {
-      this.logger.error({ error }, 'WebSocket error occurred');
-    });
+    this.realtimeWs.on('message', (data) => this.handleRealtimeMessage(data));
+    this.realtimeWs.on('error', (error) => this.logger.error({ error }, 'Realtime WebSocket error'));
+    this.realtimeWs.on('close', () => this.logger.info('Realtime WebSocket closed'));
   }
 
-  private async handleMessage(message: Buffer, isBinary: boolean) {
-    try {
-      if (isBinary) {
-        await this.handleBinaryMessage(message);
-      } 
-      else {
-        await this.handleTextMessage(message);
-      }
-    } 
-    catch (error) {
-      this.logger.error({ error }, 'Error handling message');
+  private handleRealtimeMessage(data: RawData) {
+    const event = JSON.parse(data.toString());
+    this.logger.debug({ event }, 'Received realtime event');
+
+    const handlers: { [key: string]: () => void } = {
+      'session.created': () => this.logger.info({ session_id: event.session.id }, 'Session created'),
+      'session.updated': () => this.logger.info('Session configuration updated'),
+      'input_audio_buffer.speech_started': () => this.send({ type: 'control', action: 'speech_started' }),
+      'input_audio_buffer.committed': () => event.transcript && this.send({ type: 'transcription', text: event.transcript }),
+      'input_audio_buffer.cleared': () => this.logger.debug('Input audio buffer cleared'),
+      'response.audio.delta': () => event.delta && this.sendBinary(Buffer.from(event.delta, 'base64')),
+      'response.audio.done': () => this.logger.debug({ item_id: event.item_id }, 'Audio response completed'),
+      'response.audio_transcript.delta': () => event.delta && this.send({ id: event.item_id || this.sessionId, type: 'text_delta', delta: event.delta }),
+      'response.audio_transcript.done': () => this.send({ type: 'control', action: 'text_done', id: event.item_id || this.sessionId }),
+      'response.text.delta': () => event.delta && this.send({ id: event.item_id || this.sessionId, type: 'text_delta', delta: event.delta }),
+      'response.text.done': () => this.send({ type: 'control', action: 'text_done', id: event.item_id || this.sessionId }),
+      'response.function_call': () => this.handleFunctionCall(event),
+      'response.done': () => this.logger.debug({ response_id: event.response.id }, 'Response generation completed'),
+      'error': () => this.logger.error({ error: event.error }, 'Realtime API error'),
+    };
+
+    handlers[event.type]?.() ?? this.logger.debug({ type: event.type }, 'Unhandled event type');
+  }
+
+  private handleClientMessage(data: RawData, isBinary: boolean) {
+    if (isBinary && this.realtimeWs.readyState === WebSocket.OPEN) {
+      this.realtimeWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: Buffer.from(data as ArrayBuffer).toString('base64') }));
+      return;
+    }
+
+    const parsed = JSON.parse(data.toString()) as WSMessage;
+    this.logger.debug({ parsed }, 'Received client message');
+
+    if (parsed.type === 'user_message' && this.realtimeWs.readyState === WebSocket.OPEN) {
+      this.realtimeWs.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: parsed.text }] } }));
+      this.realtimeWs.send(JSON.stringify({ type: 'response.create' }));
     }
   }
 
-  private async handleBinaryMessage(message: Buffer) {
-    try {
-      await this.rtClient.sendAudio(new Uint8Array(message));
-    } 
-    catch (error) {
-      this.logger.error({ error }, 'Failed to send audio data');
-      throw error;
-    }
-  }
-
-  private async handleTextMessage(message: Buffer) {
-    const messageString = message.toString('utf-8');
-    const parsed: WSMessage = JSON.parse(messageString);
-
-    this.logger.debug({ parsed }, 'Received text message');
-
-    if (parsed.type === 'user_message') {
-      try {
-        await this.rtClient.sendItem({
-          type: 'message',
-          role: 'user',
-          content: [{ type: 'input_text', text: parsed.text }],
-        });
-        await this.rtClient.generateResponse();
-        this.logger.debug('User message processed successfully');
-      } catch (error) {
-        this.logger.error({ error }, 'Failed to process user message');
-        throw error;
-      }
-    }
-  }
-
-  private async handleClose() {
+  private close() {
     this.logger.info('Session closing');
-    try {
-      await this.rtClient.close();
-      this.logger.info('Session closed successfully');
-    } catch (error) {
-      this.logger.error({ error }, 'Error closing session');
-    }
+    if (this.realtimeWs.readyState !== WebSocket.CLOSED) this.realtimeWs.close();
   }
 
-  private async handleTextContent(content: RTTextContent) {
-    try {
-      const contentId = `${content.itemId}-${content.contentIndex}`;
-      for await (const text of content.textChunks()) {
-        const deltaMessage: TextDelta = {
-          id: contentId,
-          type: 'text_delta',
-          delta: text,
-        };
-        this.send(deltaMessage);
-      }
-      this.send({ type: 'control', action: 'text_done', id: contentId });
-      this.logger.debug('Text content processed successfully');
-    } catch (error) {
-      this.logger.error({ error }, 'Error handling text content');
-      throw error;
-    }
-  }
+  private handleFunctionCall({ name, arguments: args, call_id }: { name: string; arguments: string; call_id: string }) {
+    if (name !== 'get_json_object' || this.realtimeWs.readyState !== WebSocket.OPEN) return;
 
-  private async handleAudioContent(content: RTAudioContent) {
-    const handleAudioChunks = async () => {
-      for await (const chunk of content.audioChunks()) {
-        this.sendBinary(chunk.buffer);
-      }
-    };
-    const handleAudioTranscript = async () => {
-      const contentId = `${content.itemId}-${content.contentIndex}`;
-      for await (const chunk of content.transcriptChunks()) {
-        this.send({ id: contentId, type: 'text_delta', delta: chunk });
-      }
-      this.send({ type: 'control', action: 'text_done', id: contentId });
-    };
-
-    try {
-      await Promise.all([handleAudioChunks(), handleAudioTranscript()]);
-      this.logger.debug('Audio content processed successfully');
-    } catch (error) {
-      this.logger.error({ error }, 'Error handling audio content');
-      throw error;
-    }
-  }
-
-  private async handleResponse(event: RTResponse) {
-    try {
-      for await (const item of event) {
-        if (item.type === 'message') {
-          for await (const content of item) {
-            if (content.type === 'text') {
-              await this.handleTextContent(content);
-            } 
-            else if (content.type === 'audio') {
-              await this.handleAudioContent(content);
-            }
-          }
-        }
-      }
-      this.logger.debug('Response handled successfully'); 
-    } catch (error) {
-      this.logger.error({ error }, 'Error handling response');
-      throw error;
-    }
-  }
-
-  private async handleInputAudio(event: RTInputAudioItem) {
-    try {
-      this.send({ type: 'control', action: 'speech_started' });
-      await event.waitForCompletion();
-
-      const transcription: Transcription = {
-        // id: event.id,
-        type: 'transcription',
-        text: event.transcription || '',
-      };
-      this.send(transcription);
-      this.logger.debug(
-        { transcriptionLength: transcription.text.length },
-        'Input audio processed successfully',
-      );
-    } catch (error) {
-      this.logger.error({ error }, 'Error handling input audio');
-      throw error;
-    }
-  }
-
-  private async startEventLoop() {
-    try {
-      this.logger.debug('Starting event loop');
-      for await (const event of this.rtClient.events()) {
-        if (event.type === 'response') {
-          this.logger.debug('Event loop handling response');
-          await this.handleResponse(event);
-        } 
-        else if (event.type === 'input_audio') {
-          this.logger.debug('Event loop handling input_audio');
-          await this.handleInputAudio(event);
-        }
-      }
-    } catch (error) {
-      this.logger.error({ error }, 'Error in event loop');
-      throw error;
-    }
+    const params = JSON.parse(args);
+    this.realtimeWs.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: { type: 'function_call_output', call_id, output: JSON.stringify(params) },
+    }));
   }
 }
