@@ -189,7 +189,7 @@ export class RTSession {
         ResponseFunctionCallDone: (event: any) => this.handleFunctionCallDone(event),
         ResponseDone: () => this.logger.debug({ response_id: event.response?.id }, 'Response generation completed'),
         Error: () => this.logger.error({ error: event.error }, 'Realtime API error'),
-        ConversationItemCreated: () => this.logger.debug({ item: event.item }, 'Conversation item created'),
+        ConversationItemCreated: () => this.logger.debug(/* { item: event.item },*/ 'Conversation item created'),
         ConversationItemInputAudioTranscriptionCompleted: () => this.logger.debug({ item_id: event.item_id, transcript: event.transcript }, 'Transcription completed'),
         ConversationItemInputAudioTranscriptionFailed: () => this.logger.error({ error: event.error }, 'Transcription failed'),
       };
@@ -199,8 +199,12 @@ export class RTSession {
         .find(key => REALTIME_SERVER_EVENTS[key] === event.type);
       const handler = eventKey ? handlers[eventKey] : undefined;
 
-      if (handler) handler(event);
-      else this.logger.debug({ type: event.type }, 'Unhandled event type');
+      if (handler) {
+        handler(event);
+      }
+      else {
+        this.logger.debug({ type: event.type }, 'Unhandled event type');
+      }
     } catch (error) {
       this.logger.error({ error, message: data.toString() }, 'Error processing realtime message');
     }
