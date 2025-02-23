@@ -50,7 +50,7 @@ graph TD
     classDef sessionLabel font-size:20px;
     class Realtime_Session sessionLabel
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style A fill:#f9f,stroke:#333,stroke-width:2px,font-size:20px;
     style B fill:#bbf,stroke:#333,stroke-width:2px
     style C fill:#dfd,stroke:#333,stroke-width:2px
     style D fill:#bbf,stroke:#333,stroke-width:2px
