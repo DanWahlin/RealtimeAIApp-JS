@@ -32,16 +32,23 @@ OPENAI_DEPLOYMENT=gpt-4o-realtime-preview
 The following diagram illustrates the WebSocket communication flow in the `RTSession` class, showing how client messages are processed and relayed to the OpenAI Realtime API.
 
 ```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 75}}}%%
 graph TD
-    A[Client] <-->|Sends audio/text| B[clientWs]
-    D[openAiWs] <-->|Sends audio/text to OpenAI| E[OpenAI Realtime API]
-
-    subgraph Session
-        B <-->|Receives responses| C[Logic]
-        C <-->|Processes messages| D
+    A[Client] -->|Sends audio/text| B[clientWs]
+    subgraph Realtime_Session["Realtime Session"]
+        B[clientWs]
+        C[Logic]
+        D[openAiWs]
     end
+    E[OpenAI Realtime API]
 
+    B <-->|Receives responses| C
+    C <-->|Processes messages| D
+    D <-->|Sends audio/text to OpenAI| E
     E -->|Sends audio/text responses| D
+
+    classDef sessionLabel font-size:20px;
+    class Realtime_Session sessionLabel
 
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style B fill:#bbf,stroke:#333,stroke-width:2px
