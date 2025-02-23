@@ -1,17 +1,12 @@
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import { pino } from 'pino';
 import { RTSession } from './session.js';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'debug',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-    },
-  },
+  transport: { target: 'pino-pretty', options: { colorize: true } },
 });
 
 const app = express();
@@ -32,40 +27,30 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws: WebSocket) => {
   logger.info('New WebSocket connection established');
 
-  const handleMessage = (message: any) => {
+  const handleInitMessage = (message: any) => {
     if (!message) {
       logger.warn('Received empty message');
       return;
     }
 
-    let messageString = '';
     try {
-      if (Buffer.isBuffer(message)) {
-        messageString = message.toString('utf8');
-        const parsedMessage = JSON.parse(messageString);
-      
-        if (parsedMessage.type === 'init' && messageString) {
-          new RTSession(ws, logger, parsedMessage.instructions);
-          ws.removeListener('message', handleMessage); // Remove the listener after processing the initial message
-        }
+      const messageString = Buffer.isBuffer(message) ? message.toString('utf8') : message.toString();
+      const parsed = JSON.parse(messageString);
+      if (parsed.type === 'init') {
+        new RTSession(ws, logger, parsed.instructions); // RTSession takes over all further messages
+        ws.off('message', handleInitMessage); // Explicitly remove this listener
       }
     } catch (error) {
-      logger.error({ error, message, messageString }, 'Message processing error');
+      logger.error({ error, message: message.toString() }, 'Failed to process init message');
     }
   };
 
-  ws.on('message', handleMessage);
-
-  ws.on('close', () => {
-    logger.info('WebSocket connection closed');
-  });
+  ws.on('message', handleInitMessage);
+  ws.on('close', () => logger.info('WebSocket connection closed'));
 });
 
 const PORT = process.env.PORT || 8080;
-
-server.listen(PORT, () => {
-  logger.info(`Server started on http://localhost:${PORT}`);
-});
+server.listen(PORT, () => logger.info(`Server started on http://localhost:${PORT}`));
