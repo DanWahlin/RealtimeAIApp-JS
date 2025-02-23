@@ -47,6 +47,7 @@ export class RealTimeManagerService implements OnDestroy {
   }
 
   private handleConnectionChange = (connected: boolean) => {
+    console.log('Connection status changed:', connected);
     this._isConnected.next(connected);
     if (connected) {
       this.toggleRecording(); // Start recording on connection
@@ -189,6 +190,8 @@ export class RealTimeManagerService implements OnDestroy {
     await this.playerService.clear();
     this.webSocketService.close();
     this.messageMap.clear();
+    this._isConnecting.next(false);
+    this._isConnected.next(false);
     this._messages.next([]);
     this._isAudioOn.next(true);
     this._isRecording.next(false);

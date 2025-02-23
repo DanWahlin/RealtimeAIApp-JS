@@ -11,6 +11,13 @@ type WSMessage =
   | { id: string; type: 'user_message'; text: string }
   | { type: 'control'; action: 'speech_started' | 'connected' | 'text_done'; greeting?: string; id?: string };
 
+// Function call response type for clarity
+interface FunctionCallResponse {
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+}
+
 const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT } = process.env as Record<string, string>;
 
 const SESSION_CONFIG = {
@@ -48,9 +55,12 @@ const REALTIME_SERVER_EVENTS = {
   ResponseAudioDone: 'response.audio.done',
   ResponseAudioTranscriptDelta: 'response.audio_transcript.delta',
   ResponseAudioTranscriptDone: 'response.audio_transcript.done',
+  ResponseContentPartAdded: 'response.content_part.added',
   ResponseTextDelta: 'response.text.delta',
   ResponseTextDone: 'response.text.done',
   ResponseFunctionCall: 'response.function_call',
+  ResponseFunctionCallDone: 'response.function_call.done',
+  ResponseFunctionCallArgumentsDelta: 'response.function_call_arguments.delta',
   ResponseDone: 'response.done',
   Error: 'error',
   ConversationItemCreated: 'conversation.item.created',
@@ -114,6 +124,18 @@ export class RTSession {
     if (this.clientWs.readyState === WebSocket.OPEN) this.clientWs.send(Buffer.from(data), { binary: true });
   }
 
+  private sendFunctionCallOutput(call_id: string, output: string) {
+    if (this.openAIWs.readyState === WebSocket.OPEN) {
+      this.openAIWs.send(JSON.stringify({
+        type: 'conversation.item.create',
+        item: { type: 'function_call_output', call_id, output },
+      }));
+      this.logger.debug({ call_id, output }, 'Sent function call output');
+    } else {
+      this.logger.warn({ call_id }, 'Cannot send function call output: Realtime WebSocket not open');
+    }
+  }
+
   private setupEventHandlers() {
     this.clientWs.on('message', (data: RawData, isBinary) => this.handleClientMessage(data, isBinary));
     this.clientWs.on('close', () => this.close());
@@ -122,14 +144,14 @@ export class RTSession {
     this.openAIWs.on('message', (data) => this.handleRealtimeMessage(data));
     this.openAIWs.on('error', (error) => this.logger.error({ error }, 'Realtime WebSocket error'));
     this.openAIWs.on('close', () => this.logger.info('Realtime WebSocket closed'));
-}
+  }
 
   private handleRealtimeMessage(data: RawData) {
     try {
       const event = JSON.parse(data.toString());
       // this.logger.debug({ event }, 'Received realtime event');
 
-      const handlers: Partial<Record<keyof typeof REALTIME_SERVER_EVENTS, () => void>> = {
+      const handlers: Partial<Record<keyof typeof REALTIME_SERVER_EVENTS, (event: any) => void>> = {
         SessionCreated: () => this.logger.info({ session_id: event.session?.id }, 'Session created'),
         SessionUpdated: () => this.logger.info('Session configuration updated'),
         InputAudioBufferSpeechStarted: () => this.send({ type: 'control', action: 'speech_started' }),
@@ -152,6 +174,7 @@ export class RTSession {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
+        ResponseContentPartAdded: () => this.logger.debug({ item_id: event.item_id }, 'Content part added'),
         ResponseTextDelta: () => {
           if (event.delta) {
             const contentId = event.item_id || this.sessionId;
@@ -162,7 +185,8 @@ export class RTSession {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
-        ResponseFunctionCall: () => this.handleFunctionCall(event),
+        ResponseFunctionCall: (event: any) => this.handleFunctionCall(event),
+        ResponseFunctionCallDone: (event: any) => this.handleFunctionCallDone(event),
         ResponseDone: () => this.logger.debug({ response_id: event.response?.id }, 'Response generation completed'),
         Error: () => this.logger.error({ error: event.error }, 'Realtime API error'),
         ConversationItemCreated: () => this.logger.debug({ item: event.item }, 'Conversation item created'),
@@ -175,7 +199,7 @@ export class RTSession {
         .find(key => REALTIME_SERVER_EVENTS[key] === event.type);
       const handler = eventKey ? handlers[eventKey] : undefined;
 
-      if (handler) handler();
+      if (handler) handler(event);
       else this.logger.debug({ type: event.type }, 'Unhandled event type');
     } catch (error) {
       this.logger.error({ error, message: data.toString() }, 'Error processing realtime message');
@@ -222,8 +246,26 @@ export class RTSession {
     this.logger.info('Session closed successfully');
   }
 
-  private handleFunctionCall({ name, arguments: args }: { name: string; arguments: string; call_id: string }) {
-    const params = JSON.parse(args);
-    this.logger.debug({ funcName: name, params }, 'Function call received');
+  private handleFunctionCall({ name, call_id }: { name: string; call_id: string }) {
+    try {
+      this.logger.debug({ funcName: name, call_id }, 'Function call received');
+      // Do nothing here — wait for ResponseFunctionCallDone for the complete arguments
+    } catch (error) {
+      this.logger.error({ error, call_id }, 'Error processing function call');
+    }
+  }
+
+  private handleFunctionCallDone({ call_id, arguments: args }: { call_id: string; arguments: string }) {
+    try {
+      this.logger.debug({ call_id, arguments: args }, 'Function call completed with arguments');
+      if (args) {
+        const params = JSON.parse(args);
+        this.sendFunctionCallOutput(call_id, JSON.stringify(params));
+      } else {
+        this.logger.warn({ call_id }, 'No arguments provided in function call done event');
+      }
+    } catch (error) {
+      this.logger.error({ error, call_id }, 'Error processing completed function call');
+    }
   }
 }
