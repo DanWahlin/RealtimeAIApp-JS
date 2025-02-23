@@ -127,7 +127,7 @@ export class RTSession {
   private handleRealtimeMessage(data: RawData) {
     try {
       const event = JSON.parse(data.toString());
-      this.logger.debug({ event }, 'Received realtime event');
+      // this.logger.debug({ event }, 'Received realtime event');
 
       const handlers: Partial<Record<keyof typeof REALTIME_SERVER_EVENTS, () => void>> = {
         SessionCreated: () => this.logger.info({ session_id: event.session?.id }, 'Session created'),
