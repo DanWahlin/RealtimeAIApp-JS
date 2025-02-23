@@ -40,7 +40,7 @@ wss.on('connection', (ws: WebSocket) => {
       const messageString = Buffer.isBuffer(message) ? message.toString('utf8') : message.toString();
       const parsed = JSON.parse(messageString);
       if (parsed.type === 'init') {
-        new RTSession(ws, logger, parsed.instructions); // RTSession takes over all further messages
+        new RTSession(ws, logger, parsed.instructions); // session.ts takes over all further messages
         ws.off('message', handleInitMessage); // Explicitly remove this listener
       }
     } catch (error) {

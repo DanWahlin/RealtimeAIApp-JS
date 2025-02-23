@@ -37,13 +37,34 @@ const SESSION_CONFIG = {
   tool_choice: 'auto',
 };
 
+// Define server event types as a const object
+const REALTIME_SERVER_EVENTS = {
+  SessionCreated: 'session.created',
+  SessionUpdated: 'session.updated',
+  InputAudioBufferSpeechStarted: 'input_audio_buffer.speech_started',
+  InputAudioBufferCommitted: 'input_audio_buffer.committed',
+  InputAudioBufferCleared: 'input_audio_buffer.cleared',
+  ResponseAudioDelta: 'response.audio.delta',
+  ResponseAudioDone: 'response.audio.done',
+  ResponseAudioTranscriptDelta: 'response.audio_transcript.delta',
+  ResponseAudioTranscriptDone: 'response.audio_transcript.done',
+  ResponseTextDelta: 'response.text.delta',
+  ResponseTextDone: 'response.text.done',
+  ResponseFunctionCall: 'response.function_call',
+  ResponseDone: 'response.done',
+  Error: 'error',
+  ConversationItemCreated: 'conversation.item.created',
+  ConversationItemInputAudioTranscriptionCompleted: 'conversation.item.input_audio_transcription.completed',
+  ConversationItemInputAudioTranscriptionFailed: 'conversation.item.input_audio_transcription.failed',
+} as const;
+
 export class RTSession {
   private readonly sessionId = crypto.randomUUID();
   private readonly logger: Logger;
-  private realtimeWs!: WebSocket;
+  private openAIWs!: WebSocket;
 
   constructor(
-    private readonly ws: WebSocket,
+    private readonly clientWs: WebSocket,
     logger: Logger,
     private readonly instructions: string
   ) {
@@ -53,7 +74,7 @@ export class RTSession {
   }
 
   private async initialize() {
-    this.realtimeWs = await this.initializeRealtimeWebSocket();
+    this.openAIWs = await this.initializeRealtimeWebSocket();
     this.setupEventHandlers();
     this.logger.info('New session created');
   }
@@ -68,7 +89,6 @@ export class RTSession {
       const ws = new WebSocket(url, { headers });
       ws.on('open', () => {
         ws.send(JSON.stringify({ type: 'session.update', session: { instructions: this.instructions, ...SESSION_CONFIG } }));
-        // Removed 'connected' greeting to match original (commented out)
         resolve(ws);
       });
       ws.on('error', (error) => reject(error));
@@ -79,7 +99,7 @@ export class RTSession {
     if (BACKEND === 'azure') {
       const token = await new DefaultAzureCredential().getToken('https://cognitiveservices.azure.com/.default');
       if (!token?.token) throw new Error('Failed to retrieve Azure access token');
-      this.logger.debug('Azure access token retrieved successfully');
+      this.logger.info('Azure access token retrieved successfully');
       return { Authorization: `Bearer ${token.token}`, 'OpenAI-Beta': 'realtime=v1' };
     }
     if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
@@ -87,67 +107,74 @@ export class RTSession {
   }
 
   private send(message: WSMessage) {
-    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message));
+    if (this.clientWs.readyState === WebSocket.OPEN) this.clientWs.send(JSON.stringify(message));
   }
 
   private sendBinary(data: ArrayBuffer) {
-    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(Buffer.from(data), { binary: true });
+    if (this.clientWs.readyState === WebSocket.OPEN) this.clientWs.send(Buffer.from(data), { binary: true });
   }
 
   private setupEventHandlers() {
-    this.ws.on('message', (data: RawData, isBinary) => this.handleClientMessage(data, isBinary));
-    this.ws.on('close', () => this.close());
-    this.ws.on('error', (error) => this.logger.error({ error }, 'WebSocket error occurred'));
+    this.clientWs.on('message', (data: RawData, isBinary) => this.handleClientMessage(data, isBinary));
+    this.clientWs.on('close', () => this.close());
+    this.clientWs.on('error', (error) => this.logger.error({ error }, 'WebSocket error occurred'));
 
-    this.realtimeWs.on('message', (data) => this.handleRealtimeMessage(data));
-    this.realtimeWs.on('error', (error) => this.logger.error({ error }, 'Realtime WebSocket error'));
-    this.realtimeWs.on('close', () => this.logger.info('Realtime WebSocket closed'));
-  }
+    this.openAIWs.on('message', (data) => this.handleRealtimeMessage(data));
+    this.openAIWs.on('error', (error) => this.logger.error({ error }, 'Realtime WebSocket error'));
+    this.openAIWs.on('close', () => this.logger.info('Realtime WebSocket closed'));
+}
 
   private handleRealtimeMessage(data: RawData) {
     try {
       const event = JSON.parse(data.toString());
-      // this.logger.debug({ event }, 'Received realtime event');
+      this.logger.debug({ event }, 'Received realtime event');
 
-      const handlers: { [key: string]: () => void } = {
-        'session.created': () => this.logger.info({ session_id: event.session?.id }, 'Session created'),
-        'session.updated': () => this.logger.info('Session configuration updated'),
-        'input_audio_buffer.speech_started': () => this.send({ type: 'control', action: 'speech_started' }),
-        'input_audio_buffer.committed': () => {
+      const handlers: Partial<Record<keyof typeof REALTIME_SERVER_EVENTS, () => void>> = {
+        SessionCreated: () => this.logger.info({ session_id: event.session?.id }, 'Session created'),
+        SessionUpdated: () => this.logger.info('Session configuration updated'),
+        InputAudioBufferSpeechStarted: () => this.send({ type: 'control', action: 'speech_started' }),
+        InputAudioBufferCommitted: () => {
           if (event.transcript) {
             this.send({ type: 'transcription', text: event.transcript });
             this.logger.debug({ transcriptionLength: event.transcript.length }, 'Input audio processed successfully');
           }
         },
-        'input_audio_buffer.cleared': () => this.logger.debug('Input audio buffer cleared'),
-        'response.audio.delta': () => event.delta && this.sendBinary(Buffer.from(event.delta, 'base64')),
-        'response.audio.done': () => this.logger.debug({ item_id: event.item_id }, 'Audio response completed'),
-        'response.audio_transcript.delta': () => {
+        InputAudioBufferCleared: () => this.logger.debug('Input audio buffer cleared'),
+        ResponseAudioDelta: () => event.delta && this.sendBinary(Buffer.from(event.delta, 'base64')),
+        ResponseAudioDone: () => this.logger.debug({ item_id: event.item_id }, 'Audio response completed'),
+        ResponseAudioTranscriptDelta: () => {
           if (event.delta) {
             const contentId = event.item_id || this.sessionId;
             this.send({ id: contentId, type: 'text_delta', delta: event.delta });
           }
         },
-        'response.audio_transcript.done': () => {
+        ResponseAudioTranscriptDone: () => {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
-        'response.text.delta': () => {
+        ResponseTextDelta: () => {
           if (event.delta) {
             const contentId = event.item_id || this.sessionId;
             this.send({ id: contentId, type: 'text_delta', delta: event.delta });
           }
         },
-        'response.text.done': () => {
+        ResponseTextDone: () => {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
-        'response.function_call': () => this.handleFunctionCall(event),
-        'response.done': () => this.logger.debug({ response_id: event.response?.id }, 'Response generation completed'),
-        'error': () => this.logger.error({ error: event.error }, 'Realtime API error'),
+        ResponseFunctionCall: () => this.handleFunctionCall(event),
+        ResponseDone: () => this.logger.debug({ response_id: event.response?.id }, 'Response generation completed'),
+        Error: () => this.logger.error({ error: event.error }, 'Realtime API error'),
+        ConversationItemCreated: () => this.logger.debug({ item: event.item }, 'Conversation item created'),
+        ConversationItemInputAudioTranscriptionCompleted: () => this.logger.debug({ item_id: event.item_id, transcript: event.transcript }, 'Transcription completed'),
+        ConversationItemInputAudioTranscriptionFailed: () => this.logger.error({ error: event.error }, 'Transcription failed'),
       };
 
-      const handler = handlers[event.type];
+      // Map the incoming event.type to the corresponding key in REALTIME_SERVER_EVENTS
+      const eventKey = (Object.keys(REALTIME_SERVER_EVENTS) as (keyof typeof REALTIME_SERVER_EVENTS)[])
+        .find(key => REALTIME_SERVER_EVENTS[key] === event.type);
+      const handler = eventKey ? handlers[eventKey] : undefined;
+
       if (handler) handler();
       else this.logger.debug({ type: event.type }, 'Unhandled event type');
     } catch (error) {
@@ -168,9 +195,9 @@ export class RTSession {
   }
 
   private handleBinaryMessage(data: RawData) {
-    if (this.realtimeWs.readyState === WebSocket.OPEN) {
+    if (this.openAIWs.readyState === WebSocket.OPEN) {
       const audioData = Buffer.from(data as ArrayBuffer).toString('base64');
-      this.realtimeWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: audioData }));
+      this.openAIWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: audioData }));
     } else {
       this.logger.warn('Realtime WebSocket not open for binary message');
     }
@@ -179,25 +206,24 @@ export class RTSession {
   private handleTextMessage(data: RawData) {
     const parsed = JSON.parse(data.toString()) as WSMessage;
     this.logger.debug({ parsed }, 'Received client message');
-    if (parsed.type === 'user_message' && this.realtimeWs.readyState === WebSocket.OPEN) {
-      this.realtimeWs.send(JSON.stringify({
+    if (parsed.type === 'user_message' && this.openAIWs.readyState === WebSocket.OPEN) {
+      this.openAIWs.send(JSON.stringify({
         type: 'conversation.item.create',
         item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: parsed.text }] },
       }));
-      this.realtimeWs.send(JSON.stringify({ type: 'response.create' }));
+      this.openAIWs.send(JSON.stringify({ type: 'response.create' }));
       this.logger.debug('User message processed successfully');
     }
   }
 
   private close() {
     this.logger.info('Session closing');
-    if (this.realtimeWs.readyState !== WebSocket.CLOSED) this.realtimeWs.close();
+    if (this.openAIWs.readyState !== WebSocket.CLOSED) this.openAIWs.close();
     this.logger.info('Session closed successfully');
   }
 
   private handleFunctionCall({ name, arguments: args }: { name: string; arguments: string; call_id: string }) {
     const params = JSON.parse(args);
     this.logger.debug({ funcName: name, params }, 'Function call received');
-    // Original code only logs; no response sent, so we align with that behavior here
   }
 }
