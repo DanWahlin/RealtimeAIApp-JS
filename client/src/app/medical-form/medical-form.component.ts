@@ -9,6 +9,7 @@ import { ChatToolbarComponent } from '../chat-toolbar/chat-toolbar.component';
 import { MatIconModule } from '@angular/material/icon';
 import { UtilitiesService } from '@core/utilities.service';
 import { RealTimeManagerService } from '@core/realtime-manager.service';
+import { Message } from '@shared/interfaces';
 
 enum PatientTab {
   Patient = 'Patient',
@@ -16,10 +17,17 @@ enum PatientTab {
   Vitals = 'Vitals'
 }
 
+interface Symptom {
+  id: number;
+  description: string;
+  duration: string;
+  severity: number;
+}
+
 interface Patient {
-  tab: string;
+  tab: PatientTab;
   information: { name: string; dob: string; gender: string };
-  symptoms: { id: number; description: string; duration: string; severity: number }[];
+  symptoms: Symptom[];
   vitals: { temperature: number; bloodPressure: string; heartRate: number };
 }
 
@@ -41,7 +49,6 @@ interface Patient {
 export class MedicalFormComponent implements OnInit {
   private nextSymptomId = 1;
   private tabs = Object.values(PatientTab);
-  private jsonSchema: any = {};
   private utilitiesService = inject(UtilitiesService);
   private initialPatientData: Patient = {
     tab: PatientTab.Patient,
@@ -49,28 +56,94 @@ export class MedicalFormComponent implements OnInit {
     symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1 }],
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };
-  instructions = `You are helping to edit a JSON object that represents a medical patient's personal information, symptoms, and vitals.
+  instructions = `You are helping to edit a JSON object we'll refer to as "modelData" that represents a medical patient's personal information, symptoms, and vitals.
     This JSON object conforms to the following schema: 
-    ${JSON.stringify(this.jsonSchema)}
+
+    ${this.createJsonSchema()}
+
+    If the user says "Patient", return a value of "Patient" for the "tab" property.
+    If the user says "Symptoms", return a value of "Symptoms" for the "tab" property.
+    If the user says "Vitals", return a value of "Vitals" for the "tab" property.
   
     Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
     Each time they provide information that can be added to the JSON object, update the JSON object, and then save it.
     Do not attempt to correct their mistakes.
-    After saving the updated object, just reply OK.
+    After sending the updated object, just reply OK.
+    Send back the full updated Patient object, not just changes, unless explicitly requested otherwise.
+
+    Always invoke the function call output tooling (get_json_object function) with the updated JSON object that matches the defined function call parameters.
   `;
   selectedTabIndex = 0;
-  // Simplest way to detect changes in nested objects 
-  // Tried BehaviorSubject and Signal but the HTML had to be jacked up more than I wanted
-  patient = this.utilitiesService.createProxy(this.initialPatientData, this.onPatientChanged.bind(this));
-  realtimeManagerService = inject(RealTimeManagerService);
+  // Use definite assignment assertion (!) to indicate patient will be assigned in ngOnInit
+  patient!: Patient;
+  private isUpdating = false; // Flag to prevent reentrant updates
+  private lastSentPatient: Patient | null = null; // Track last sent patient to avoid redundant sends
+  private lastUpdateTimestamp = 0; // Track last update timestamp for debouncing
+  private readonly DEBOUNCE_DELAY = 500; // 500ms debounce to prevent rapid updates
+  private realtimeManagerService = inject(RealTimeManagerService);
 
-  ngOnInit() {   
-    this.jsonSchema = this.utilitiesService.generateSchemaFromObject(this.patient);
+  ngOnInit() {
+    // Create proxy with a no-arg callback that calls onPatientChanged
+    this.patient = this.utilitiesService.createProxy(this.initialPatientData, () => this.onPatientChanged());
   }
 
-  private onPatientChanged() {
-    // console.log('Patient changed:', this.patient);
-    this.realtimeManagerService.sendMessage(`The current modelData value is ${JSON.stringify(this.patient)}. When updating this later, include all these same values if they are unchanged (or they will be overwritten with nulls).`);
+  createJsonSchema(): string {
+    return JSON.stringify(this.utilitiesService.generateSchemaFromObject(this.patient));
+  }
+
+  private onPatientChanged(): void {
+    if (this.isUpdating) return;
+    const now = Date.now();
+    if (now - this.lastUpdateTimestamp < this.DEBOUNCE_DELAY) return; // Debounce to prevent rapid updates
+
+    this.isUpdating = true;
+    try {
+      // Only send if patient has changed since last send (deep comparison)
+      if (!this.isEqual(this.lastSentPatient, this.patient)) {
+        this.realtimeManagerService.sendMessage(`The updated modelData is ${JSON.stringify(this.patient)}.`);
+        this.lastSentPatient = JSON.parse(JSON.stringify(this.patient)); // Deep copy to track state
+        this.lastUpdateTimestamp = now; // Update timestamp after successful send
+      }
+    } finally {
+      this.isUpdating = false;
+    }
+  }
+
+  private isEqual(obj1: any, obj2: any): boolean {
+    if (obj1 === obj2) return true;
+    if (obj1 == null || obj2 == null) return false;
+    if (typeof obj1 !== 'object' || typeof obj2 !== 'object') return false;
+
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+
+    if (keys1.length !== keys2.length) return false;
+
+    for (const key of keys1) {
+      if (!keys2.includes(key)) return false;
+      if (Array.isArray(obj1[key]) && Array.isArray(obj2[key])) {
+        if (!this.arraysEqual(obj1[key], obj2[key])) return false;
+      } else if (typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
+        if (!this.isEqual(obj1[key], obj2[key])) return false;
+      } else if (obj1[key] !== obj2[key]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private arraysEqual(arr1: any[], arr2: any[]): boolean {
+    if (arr1.length !== arr2.length) return false;
+    for (let i = 0; i < arr1.length; i++) {
+      if (Array.isArray(arr1[i]) && Array.isArray(arr2[i])) {
+        if (!this.arraysEqual(arr1[i], arr2[i])) return false;
+      } else if (typeof arr1[i] === 'object' && typeof arr2[i] === 'object') {
+        if (!this.isEqual(arr1[i], arr2[i])) return false;
+      } else if (arr1[i] !== arr2[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   onTabChanged(tabIndex: number): void {
@@ -78,11 +151,11 @@ export class MedicalFormComponent implements OnInit {
     this.selectedTabIndex = tabIndex;
   }
 
-  addSymptom() {
+  addSymptom(): void {
     this.patient.symptoms.push({ id: this.nextSymptomId++, description: '', duration: '', severity: 1 });
   }
 
-  removeSymptom(id: number) {
+  removeSymptom(id: number): void {
     this.patient.symptoms = this.patient.symptoms.filter(s => s.id !== id);
 
     // Reset nextSymptomId if all symptoms are removed
@@ -91,32 +164,83 @@ export class MedicalFormComponent implements OnInit {
     }
   }
 
-  private updateModelProperties(oldModel: any, newModel: any): boolean {
-    let foundChange = false;
-  
-    for (const key of Object.keys(oldModel)) {
-      const oldValue = oldModel[key];
-      const newValue = newModel[key];
-  
-      if (this.isComplexType(oldValue)) {
-        foundChange = this.updateModelProperties(oldValue, newValue) || foundChange;
-      } else if (oldValue !== newValue) {
-        oldModel[key] = newValue;
-        this.notifyFieldChanged(oldModel, key);
-        foundChange = true;
+  onMessagesChanged(messages: Message[]): void {
+    console.log('Messages:', messages);
+    const functionCallOutputMessages = messages.filter(m => m.action === 'function_call_output');
+    if (functionCallOutputMessages.length && !this.isUpdating) {
+      this.isUpdating = true;
+      try {
+        const newModel = JSON.parse(functionCallOutputMessages[0].content) as Partial<Patient>;
+        const mergedNewModel = this.mergeModel(newModel);
+        this.patient = mergedNewModel;
+        // const modelChanged = this.updateModelProperties(this.patient, mergedNewModel);
+        // console.log('Model changed:', modelChanged);
+      } catch (error) {
+        console.error('Error parsing function call output:', error);
+      } finally {
+        this.isUpdating = false;
       }
     }
-  
+  }
+
+  private updateModelProperties(oldModel: Patient, newModel: Patient): boolean {
+    let foundChange = false;
+
+    // Check and apply changes for each top-level property
+    for (const key of Object.keys(newModel) as (keyof Patient)[]) {
+      if (!this.isEqual(oldModel[key], newModel[key])) {
+        foundChange = true;
+        // Create new references for changed nested objects/arrays to ensure proxy detects changes
+        if (key === 'tab') {
+          oldModel.tab = newModel.tab;
+        } 
+        else if (key === 'information') {
+          oldModel.information = { ...oldModel.information, ...newModel.information };
+        } 
+        else if (key === 'symptoms') {
+          oldModel.symptoms = this.mergeSymptoms(newModel.symptoms, oldModel.symptoms);
+        } 
+        else if (key === 'vitals') {
+          oldModel.vitals = { ...oldModel.vitals, ...newModel.vitals };
+        }
+      }
+    }
+
+    if (foundChange) {
+      this.notifyFieldChanged(oldModel, Object.keys(newModel).join(', '));
+    }
+
     return foundChange;
   }
-  
-  private isComplexType(value: any): boolean {
-    return value && typeof value === 'object' && !Array.isArray(value);
+
+  private mergeModel(partialModel: Partial<Patient>): Patient {
+    console.log('Patient:', this.patient);
+    console.log('Partial patient:', partialModel);
+    const mergedPatient = { 
+      tab: partialModel.tab || this.patient.tab,
+      information: { ...this.patient.information, ...partialModel.information },
+      symptoms: this.mergeSymptoms(partialModel.symptoms || [], this.patient.symptoms),
+      vitals: { ...this.patient.vitals, ...partialModel.vitals }
+    };
+    console.log('Merged patient:', mergedPatient);
+    return mergedPatient;
   }
-  
-  private notifyFieldChanged(model: any, fieldName: string): void {
-    // Implement the logic to notify field change
-    console.log(`Field changed: ${fieldName} in model`, model);
+
+  private mergeSymptoms(newSymptoms: Symptom[], existingSymptoms: Symptom[]): Symptom[] {
+    // Create a map of existing symptoms by id for efficient lookup and merging
+    const symptomMap = new Map<number, Symptom>();
+    existingSymptoms.forEach(symptom => symptomMap.set(symptom.id, { ...symptom }));
+
+    // Merge new symptoms, updating existing ones or adding new ones
+    newSymptoms.forEach(newSymptom => {
+      symptomMap.set(newSymptom.id, { ...symptomMap.get(newSymptom.id), ...newSymptom });
+    });
+
+    // Convert map back to array, maintaining order (sort by id for consistency)
+    return Array.from(symptomMap.values()).sort((a, b) => a.id - b.id);
   }
-  
+
+  private notifyFieldChanged(model: Patient, fieldNames: string): void {
+    console.log(`Field changed: ${fieldNames} in model`, model);
+  }
 }

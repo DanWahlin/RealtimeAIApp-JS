@@ -159,19 +159,33 @@ export class RealTimeManagerService implements OnDestroy {
         }
         break;
       case 'control':
-        if (message.action === 'connected' && message.greeting) {
-          this.currentConnectingMessage!.content = message.greeting!;
-          this._messages.next(Array.from(this.messageMap.values()));
-        } else if (message.action === 'speech_started') {
-          this.playerService.clear();
-          const contrivedId = 'userMessage' + Math.random();
-          this.currentUserMessage = {
-            id: contrivedId,
-            type: 'user',
-            content: '...',
-          };
-          this.messageMap.set(contrivedId, this.currentUserMessage);
-          this._messages.next(Array.from(this.messageMap.values()));
+        let userMessage: Message | null = null;
+        switch (message.action) {
+          case 'function_call_output':
+            if (!message.id || !message.functionCallParams) break;
+            // Clear previous messages before processing new function call output
+            this._messages.next([]);
+            this.messageMap.clear();
+            userMessage = {
+              id: message.id,
+              type: message.type,
+              action: message.action,
+              content: message.functionCallParams,
+            };
+            console.log('function_call_output:', userMessage);
+            break;
+          case 'speech_started':
+            this.playerService.clear();
+            const contrivedId = 'userMessage' + Math.random();
+            userMessage = {
+              id: contrivedId,
+              type: 'user',
+              content: '...',
+            };
+            break;
+        }
+        if (userMessage) {
+          this._messages.next([userMessage]); // Emit just the new userMessage as an array
         }
         break;
     }

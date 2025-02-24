@@ -1,4 +1,4 @@
-<app-chat-toolbar [showMessageInput]="false" [instructions]="instructions"></app-chat-toolbar>
+<app-chat-toolbar [showMessageInput]="false" (messagesChanged)="onMessagesChanged($event)" [instructions]="instructions"></app-chat-toolbar>
 <div class="medical-form">
     <mat-tab-group [selectedIndex]="selectedTabIndex" (selectedIndexChange)="onTabChanged($event)">
         <mat-tab label="Patient">

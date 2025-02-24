@@ -1,6 +1,7 @@
 export interface Message {
     id: string;
     type: string;
+    action?: string;
     content: string;
 }
 
@@ -10,7 +11,7 @@ export interface WSMessage {
     text?: string;
     delta?: string;
     action?: string;
-    greeting?: string;
+    functionCallParams?: string;
 }
 
 export interface WebSocketMessage {

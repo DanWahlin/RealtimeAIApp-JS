@@ -9,9 +9,9 @@ type WSMessage =
   | { id: string; type: 'text_delta'; delta: string }
   | { id?: string; type: 'transcription'; text: string }
   | { id: string; type: 'user_message'; text: string }
-  | { type: 'control'; action: 'speech_started' | 'connected' | 'text_done'; greeting?: string; id?: string };
+  | { type: 'control'; action: 'speech_started' | 'connected' | 'text_done' | 'function_call_output'; functionCallParams?: string; id?: string };
 
-// Function call response type for clarity
+// Function call response type for clarity (optional, retained for future-proofing)
 interface FunctionCallResponse {
   type: 'function_call_output';
   call_id: string;
@@ -33,8 +33,20 @@ const SESSION_CONFIG = {
     parameters: {
       type: 'object',
       properties: {
-        tab: { type: 'string' },
-        information: { type: 'object', properties: { name: { type: 'string' }, dob: { type: 'string' }, gender: { type: 'string' } }, required: ['name', 'dob', 'gender'] },
+        tab: { type: 'string', enum: ['Patient', 'Symptoms', 'Vitals'] },
+        information: { 
+          type: 'object', 
+          properties: { 
+            name: { type: 'string' }, 
+            dob: { 
+              type: 'string', 
+              format: 'date', // Indicates it's a date
+              pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
+            },
+            gender: { type: 'string', enum: ['male', 'female'] } 
+          }, 
+          required: ['name', 'dob', 'gender'] 
+        },
         symptoms: { type: 'array', items: { type: 'object', properties: { id: { type: 'number' }, description: { type: 'string' }, duration: { type: 'string' }, severity: { type: 'number' } }, required: ['id', 'description', 'duration', 'severity'] } },
         vitals: { type: 'object', properties: { temperature: { type: 'number' }, bloodPressure: { type: 'string' }, heartRate: { type: 'number' } }, required: ['temperature', 'bloodPressure', 'heartRate'] },
       },
@@ -44,7 +56,6 @@ const SESSION_CONFIG = {
   tool_choice: 'auto',
 };
 
-// Define server event types as a const object
 const REALTIME_SERVER_EVENTS = {
   SessionCreated: 'session.created',
   SessionUpdated: 'session.updated',
@@ -66,6 +77,11 @@ const REALTIME_SERVER_EVENTS = {
   ConversationItemCreated: 'conversation.item.created',
   ConversationItemInputAudioTranscriptionCompleted: 'conversation.item.input_audio_transcription.completed',
   ConversationItemInputAudioTranscriptionFailed: 'conversation.item.input_audio_transcription.failed',
+  ResponseCreated: 'response.created',
+  RateLimitsUpdated: 'rate_limits.updated',
+  ResponseOutputItemAdded: 'response.output_item.added',
+  ResponseOutputItemDone: 'response.output_item.done',
+  ResponseFunctionCallArgumentsDone: 'response.function_call_arguments.done',
 } as const;
 
 export class RTSession {
@@ -117,23 +133,13 @@ export class RTSession {
   }
 
   private send(message: WSMessage) {
-    if (this.clientWs.readyState === WebSocket.OPEN) this.clientWs.send(JSON.stringify(message));
+    if (this.clientWs.readyState === WebSocket.OPEN) {
+      this.clientWs.send(JSON.stringify(message));
+    }
   }
 
   private sendBinary(data: ArrayBuffer) {
     if (this.clientWs.readyState === WebSocket.OPEN) this.clientWs.send(Buffer.from(data), { binary: true });
-  }
-
-  private sendFunctionCallOutput(call_id: string, output: string) {
-    if (this.openAIWs.readyState === WebSocket.OPEN) {
-      this.openAIWs.send(JSON.stringify({
-        type: 'conversation.item.create',
-        item: { type: 'function_call_output', call_id, output },
-      }));
-      this.logger.debug({ call_id, output }, 'Sent function call output');
-    } else {
-      this.logger.warn({ call_id }, 'Cannot send function call output: Realtime WebSocket not open');
-    }
   }
 
   private setupEventHandlers() {
@@ -185,13 +191,17 @@ export class RTSession {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
-        ResponseFunctionCall: (event: any) => this.handleFunctionCall(event),
-        ResponseFunctionCallDone: (event: any) => this.handleFunctionCallDone(event),
+        ResponseFunctionCallArgumentsDelta: () => this.logger.debug('Ignoring function call arguments delta for simplicity'),
+        ResponseFunctionCallArgumentsDone: (event: any) => this.handleFunctionCallArgumentsDone(event),
         ResponseDone: () => this.logger.debug({ response_id: event.response?.id }, 'Response generation completed'),
         Error: () => this.logger.error({ error: event.error }, 'Realtime API error'),
-        ConversationItemCreated: () => this.logger.debug(/* { item: event.item },*/ 'Conversation item created'),
+        ConversationItemCreated: () => this.logger.debug({ item: event.item }, 'Conversation item created'),
         ConversationItemInputAudioTranscriptionCompleted: () => this.logger.debug({ item_id: event.item_id, transcript: event.transcript }, 'Transcription completed'),
         ConversationItemInputAudioTranscriptionFailed: () => this.logger.error({ error: event.error }, 'Transcription failed'),
+        ResponseCreated: () => this.logger.debug('Response created'),
+        RateLimitsUpdated: () => this.logger.debug('Rate limits updated'),
+        ResponseOutputItemAdded: () => this.logger.debug('Response output item added'),
+        ResponseOutputItemDone: () => this.logger.debug('Response output item done'),
       };
 
       // Map the incoming event.type to the corresponding key in REALTIME_SERVER_EVENTS
@@ -250,26 +260,21 @@ export class RTSession {
     this.logger.info('Session closed successfully');
   }
 
-  private handleFunctionCall({ name, call_id }: { name: string; call_id: string }) {
+  private handleFunctionCallArgumentsDone({ call_id, arguments: args }: { call_id: string; arguments: string }) {
     try {
-      this.logger.debug({ funcName: name, call_id }, 'Function call received');
-      // Do nothing here — wait for ResponseFunctionCallDone for the complete arguments
-    } catch (error) {
-      this.logger.error({ error, call_id }, 'Error processing function call');
-    }
-  }
-
-  private handleFunctionCallDone({ call_id, arguments: args }: { call_id: string; arguments: string }) {
-    try {
-      this.logger.debug({ call_id, arguments: args }, 'Function call completed with arguments');
+      this.logger.debug({ call_id, arguments: args }, 'Function call arguments completed');
       if (args) {
-        const params = JSON.parse(args);
-        this.sendFunctionCallOutput(call_id, JSON.stringify(params));
+        this.send({ 
+          type: 'control', 
+          action: 'function_call_output', 
+          id: call_id, 
+          functionCallParams: args
+        });
       } else {
-        this.logger.warn({ call_id }, 'No arguments provided in function call done event');
+        this.logger.warn({ call_id }, 'No arguments provided in function call arguments done event');
       }
     } catch (error) {
-      this.logger.error({ error, call_id }, 'Error processing completed function call');
+      this.logger.error({ error, call_id }, 'Error processing completed function call arguments');
     }
   }
 }

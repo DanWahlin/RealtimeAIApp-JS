@@ -1,4 +1,4 @@
-import { Injectable } from "@angular/core";
+import { Injectable } from '@angular/core';
 
 @Injectable({
   providedIn: 'root'
@@ -34,12 +34,15 @@ export class UtilitiesService {
             return value;
           },
           set: (target, prop, value) => {
-            Reflect.set(target, prop, value);
-      
-            // Debounce change detection
-            clearTimeout(this.debounceTimer);
-            this.debounceTimer = setTimeout(() => onChange(), 500);
-      
+            const currentValue = Reflect.get(target, prop);
+            // Only update and trigger onChange if the value has changed
+            if (currentValue !== value) {
+              Reflect.set(target, prop, value);
+              
+              // Debounce change detection
+              clearTimeout(this.debounceTimer);
+              this.debounceTimer = setTimeout(() => onChange(), 500);
+            }
             return true;
           }
         });
