@@ -54,6 +54,7 @@ export class RealTimeManagerService implements OnDestroy {
     }
     else {
       this._messages.next([]); // Clear messages on disconnection
+      this.messageMap.clear(); // Clear messageMap on disconnection
     }
   };
 
@@ -163,7 +164,7 @@ export class RealTimeManagerService implements OnDestroy {
         switch (message.action) {
           case 'function_call_output':
             if (!message.id || !message.functionCallParams) break;
-            // Clear previous messages before processing new function call output
+            // Clear both _messages and messageMap before processing new function call output
             this._messages.next([]);
             this.messageMap.clear();
             userMessage = {
@@ -173,6 +174,10 @@ export class RealTimeManagerService implements OnDestroy {
               content: message.functionCallParams,
             };
             console.log('function_call_output:', userMessage);
+            if (userMessage) {
+              this.messageMap.set(userMessage.id, userMessage);
+              this._messages.next([userMessage]); // Emit only the new function_call_output message
+            }
             break;
           case 'speech_started':
             this.playerService.clear();
@@ -182,10 +187,11 @@ export class RealTimeManagerService implements OnDestroy {
               type: 'user',
               content: '...',
             };
+            if (userMessage) {
+              this.messageMap.set(userMessage.id, userMessage);
+              this._messages.next(Array.from(this.messageMap.values()));
+            }
             break;
-        }
-        if (userMessage) {
-          this._messages.next([userMessage]); // Emit just the new userMessage as an array
         }
         break;
     }

@@ -56,13 +56,13 @@ export class MedicalFormComponent implements OnInit {
     symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1 }],
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };
-  instructions = `You are helping to edit a JSON object we'll refer to as "modelData" that represents a medical patient's personal information, symptoms, and vitals.
+  instructions = `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's personal information, symptoms, and vitals.
     This JSON object conforms to the following schema: 
 
     ${this.createJsonSchema()}
 
     If the user says "Patient", return a value of "Patient" for the "tab" property.
-    If the user says "Symptoms", return a value of "Symptoms" for the "tab" property.
+    If the user says "Symptom" or "Symptoms", return a value of "Symptoms" for the "tab" property.
     If the user says "Vitals", return a value of "Vitals" for the "tab" property.
   
     Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
@@ -100,7 +100,7 @@ export class MedicalFormComponent implements OnInit {
     try {
       // Only send if patient has changed since last send (deep comparison)
       if (!this.isEqual(this.lastSentPatient, this.patient)) {
-        this.realtimeManagerService.sendMessage(`The updated modelData is ${JSON.stringify(this.patient)}.`);
+        this.realtimeManagerService.sendMessage(`The updated patientData is ${JSON.stringify(this.patient)}.`);
         this.lastSentPatient = JSON.parse(JSON.stringify(this.patient)); // Deep copy to track state
         this.lastUpdateTimestamp = now; // Update timestamp after successful send
       }
@@ -165,7 +165,6 @@ export class MedicalFormComponent implements OnInit {
   }
 
   onMessagesChanged(messages: Message[]): void {
-    console.log('Messages:', messages);
     const functionCallOutputMessages = messages.filter(m => m.action === 'function_call_output');
     if (functionCallOutputMessages.length && !this.isUpdating) {
       this.isUpdating = true;
@@ -174,7 +173,7 @@ export class MedicalFormComponent implements OnInit {
         const mergedNewModel = this.mergeModel(newModel);
         this.patient = mergedNewModel;
         // const modelChanged = this.updateModelProperties(this.patient, mergedNewModel);
-        // console.log('Model changed:', modelChanged);
+        console.log('patient changed:', this.patient);
       } catch (error) {
         console.error('Error parsing function call output:', error);
       } finally {
@@ -214,15 +213,15 @@ export class MedicalFormComponent implements OnInit {
   }
 
   private mergeModel(partialModel: Partial<Patient>): Patient {
-    console.log('Patient:', this.patient);
-    console.log('Partial patient:', partialModel);
+    // console.log('Patient:', this.patient);
+    // console.log('Partial patient:', partialModel);
     const mergedPatient = { 
       tab: partialModel.tab || this.patient.tab,
       information: { ...this.patient.information, ...partialModel.information },
       symptoms: this.mergeSymptoms(partialModel.symptoms || [], this.patient.symptoms),
       vitals: { ...this.patient.vitals, ...partialModel.vitals }
     };
-    console.log('Merged patient:', mergedPatient);
+    //console.log('Merged patient:', mergedPatient);
     return mergedPatient;
   }
 
