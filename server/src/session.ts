@@ -9,7 +9,8 @@ type WSMessage =
   | { id: string; type: 'text_delta'; delta: string }
   | { id?: string; type: 'transcription'; text: string }
   | { id: string; type: 'user_message'; text: string }
-  | { type: 'control'; action: 'speech_started' | 'connected' | 'text_done' | 'function_call_output'; functionCallParams?: string; id?: string };
+  | { type: 'control'; action: 'speech_started' | 'connected' | 'text_done' | 'function_call_output'; functionCallParams?: string; id?: string }
+  | { type: 'control'; action: 'session_created'; id?: string }; // Added for session created notification
 
 // Function call response type for clarity (optional, retained for future-proofing)
 interface FunctionCallResponse {
@@ -158,7 +159,11 @@ export class RTSession {
       // this.logger.debug({ event }, 'Received realtime event');
 
       const handlers: Partial<Record<keyof typeof REALTIME_SERVER_EVENTS, (event: any) => void>> = {
-        SessionCreated: () => this.logger.info({ session_id: event.session?.id }, 'Session created'),
+        SessionCreated: (event) => {
+          this.logger.info({ session_id: event.session?.id }, 'Session created');
+          // Send a message to the client to update the UI
+          this.send({ type: 'control', action: 'session_created', id: this.sessionId });
+        },
         SessionUpdated: () => this.logger.info('Session configuration updated'),
         InputAudioBufferSpeechStarted: () => this.send({ type: 'control', action: 'speech_started' }),
         InputAudioBufferCommitted: () => {

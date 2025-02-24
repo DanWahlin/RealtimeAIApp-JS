@@ -7,9 +7,8 @@
           : "Connect" }}
   </button>
 
-  @if (realtimeManagerService.isConnected$ | async) {
-  <span class="chat-toolbar">
-    
+  @if ((realtimeManagerService.isConnected$ | async ) && (this.realtimeManagerService.sessionCreated$ | async)) {
+    <span class="chat-toolbar">    
       <span (click)="toggleRecording()">
         @if (realtimeManagerService.isRecording$ | async) {
           <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">

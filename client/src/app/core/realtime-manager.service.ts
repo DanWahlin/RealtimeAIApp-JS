@@ -12,7 +12,6 @@ export class RealTimeManagerService implements OnDestroy {
   private endpoint = 'ws://localhost:8080/realtime';
   private subscriptions = new Subscription();
   private messageMap = new Map<string, Message>();
-  private currentConnectingMessage: Message | undefined = { id: '', type: '', content: '' };
   private currentUserMessage: Message | undefined = { id: '', type: '', content: '' };
 
   private _isConnected = new BehaviorSubject<boolean>(false);
@@ -20,6 +19,9 @@ export class RealTimeManagerService implements OnDestroy {
 
   private _isConnecting = new BehaviorSubject<boolean>(false);
   isConnecting$ = this._isConnecting.asObservable();
+
+  private _isSessionCreated = new BehaviorSubject<boolean>(false);
+  sessionCreated$ = this._isSessionCreated.asObservable();
 
   private _isAudioOn = new BehaviorSubject<boolean>(true);
   isAudioOn$ = this._isAudioOn.asObservable();
@@ -192,6 +194,10 @@ export class RealTimeManagerService implements OnDestroy {
               this._messages.next(Array.from(this.messageMap.values()));
             }
             break;
+          case 'session_created':
+            this._isSessionCreated.next(true); // Update session status
+            console.log('Session created notification received:', message.id);
+            break;
         }
         break;
     }
@@ -203,18 +209,6 @@ export class RealTimeManagerService implements OnDestroy {
     } catch (error) {
       this.logError('Connection failed:', error);
     }
-  }
-
-  async disconnect() {
-    this.recorderService.stop();
-    await this.playerService.clear();
-    this.webSocketService.close();
-    this.messageMap.clear();
-    this._isConnecting.next(false);
-    this._isConnected.next(false);
-    this._messages.next([]);
-    this._isAudioOn.next(true);
-    this._isRecording.next(false);
   }
 
   async sendMessage(content: string) {
@@ -234,6 +228,19 @@ export class RealTimeManagerService implements OnDestroy {
         }),
       });
     }
+  }
+
+  async disconnect() {
+    this.recorderService.stop();
+    await this.playerService.clear();
+    this.webSocketService.close();
+    this.messageMap.clear();
+    this._isConnecting.next(false);
+    this._isConnected.next(false);
+    this._isSessionCreated.next(false);
+    this._messages.next([]);
+    this._isAudioOn.next(true);
+    this._isRecording.next(false);
   }
 
   ngOnDestroy() {

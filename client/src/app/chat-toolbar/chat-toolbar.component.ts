@@ -5,28 +5,30 @@ import { MatButtonModule } from '@angular/material/button';
 import { RealTimeManagerService } from '@core/realtime-manager.service';
 import { Message } from '@shared/interfaces';
 import { AsyncPipe } from '@angular/common';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-chat-toolbar',
   templateUrl: './chat-toolbar.component.html',
   styleUrls: ['./chat-toolbar.component.css'],
-  imports: [ AsyncPipe, MatIconModule, MatButtonModule ]
+  imports: [AsyncPipe, MatIconModule, MatButtonModule]
 })
 export class ChatToolbarComponent implements OnInit, OnDestroy {
   currentMessage = '';
   @Input() showMessageInput = true;
   @Input() instructions = '';
-
   @Output() messagesChanged = new EventEmitter<Message[]>();
-
   realtimeManagerService = inject(RealTimeManagerService);
+  subscription = new Subscription();
 
   async ngOnInit() {
     await this.realtimeManagerService.init();
 
-    this.realtimeManagerService.messages$.subscribe((messages) => {
-      this.messagesChanged.emit(messages);
-    });
+    this.subscription.add(
+      this.realtimeManagerService.messages$.subscribe((messages) => {
+        this.messagesChanged.emit(messages);
+      })
+    );
   }
 
   async connect() {
@@ -52,6 +54,7 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.subscription.unsubscribe();
     this.realtimeManagerService.ngOnDestroy();
   }
 }
