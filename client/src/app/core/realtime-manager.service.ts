@@ -52,11 +52,11 @@ export class RealTimeManagerService implements OnDestroy {
     console.log('Connection status changed:', connected);
     this._isConnected.next(connected);
     if (connected) {
-      this.toggleRecording(); // Start recording on connection
+      this.toggleRecording();
     }
     else {
-      this._messages.next([]); // Clear messages on disconnection
-      this.messageMap.clear(); // Clear messageMap on disconnection
+      this._messages.next([]);
+      this.messageMap.clear(); 
     }
   };
 
