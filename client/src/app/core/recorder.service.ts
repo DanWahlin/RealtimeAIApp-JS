@@ -9,6 +9,7 @@ export class RecorderService {
   private mediaStream: MediaStream | null = null;
   private mediaStreamSource: MediaStreamAudioSourceNode | null = null;
   private workletNode: AudioWorkletNode | null = null;
+  private isModuleLoaded = false;
 
   public constructor() {}
 
@@ -17,6 +18,7 @@ export class RecorderService {
   }
 
   async start(stream: MediaStream) {
+    if (this.isModuleLoaded) return;
     try {
       this.mediaStream = stream;
       this.audioContext = new AudioContext({ latencyHint: 'interactive', sampleRate: 24000 });
@@ -64,6 +66,7 @@ export class RecorderService {
       };
       this.mediaStreamSource.connect(this.workletNode);
       this.workletNode.connect(this.audioContext.destination);
+      this.isModuleLoaded = true;
     } catch (error) {
       console.error('Error starting recorder:', error);
       this.stop();

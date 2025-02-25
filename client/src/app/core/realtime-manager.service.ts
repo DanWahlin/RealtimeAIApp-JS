@@ -3,7 +3,7 @@ import { WebSocketService } from '@core/web-socket.service';
 import { PlayerService } from '@core/player.service';
 import { RecorderService } from '@core/recorder.service';
 import { Message, WSMessage } from '@shared/interfaces';
-import { Subscription, firstValueFrom, BehaviorSubject } from 'rxjs';
+import { Subscription, firstValueFrom, BehaviorSubject, filter } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -44,17 +44,42 @@ export class RealTimeManagerService implements OnDestroy {
     );
 
     this.subscriptions.add(
+      this.sessionCreated$.subscribe((isSessionCreated) => {
+          if (isSessionCreated) {
+            console.log('Session created ******');
+            this._isConnecting.next(false);
+            this._isConnected.next(true);
+            this.toggleRecording();
+          }
+      })
+    );
+
+    this.subscriptions.add(
       this.webSocketService.messages$.subscribe(this.handleWebSocketMessage)
     );
   }
 
+  async connect(instructions: string) {
+    if (this._isConnected.value) {
+      await this.disconnect();
+      return;
+    } 
+    
+    // Start connection process
+    this._isConnecting.next(true);
+    try {
+      // Connect will trigger WebSocketService.onopen which will emit isConnected$
+      await this.webSocketService.connect(this.endpoint, instructions);
+    } catch (error) {
+      this.logError('Connection failed:', error);
+      this._isConnecting.next(false);
+      this._isConnected.next(false);
+    }
+  }
+
   private handleConnectionChange = (connected: boolean) => {
     console.log('Connection status changed:', connected);
-    this._isConnected.next(connected);
-    if (connected) {
-      this.toggleRecording();
-    }
-    else {
+    if (!connected) {
       this._messages.next([]);
       this.messageMap.clear(); 
     }
@@ -77,24 +102,6 @@ export class RealTimeManagerService implements OnDestroy {
 
   private logError(message: string, error: any) {
     console.error(message, error);
-  }
-
-  async connect(instructions: string) {
-    if (this._isConnected.value) {
-      await this.disconnect();
-      this._isConnected.next(false);
-    } else {
-      this._isConnecting.next(true);
-      try {
-        this.webSocketService.connect(this.endpoint, instructions);
-        this._isConnected.next(true);
-      } catch (error) {
-        this.logError('Connection failed:', error);
-        this._isConnected.next(false);
-      } finally {
-        this._isConnecting.next(false);
-      }
-    }
   }
 
   async toggleRecording() {
@@ -231,6 +238,7 @@ export class RealTimeManagerService implements OnDestroy {
   }
 
   async disconnect() {
+    console.log('Disconnecting...');
     this.recorderService.stop();
     await this.playerService.clear();
     this.webSocketService.close();

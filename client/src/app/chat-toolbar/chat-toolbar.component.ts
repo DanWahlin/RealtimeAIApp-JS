@@ -55,6 +55,6 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.subscription.unsubscribe();
-    this.realtimeManagerService.ngOnDestroy();
+    this.realtimeManagerService.disconnect();
   }
 }
