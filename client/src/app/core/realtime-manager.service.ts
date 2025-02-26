@@ -46,7 +46,7 @@ export class RealTimeManagerService implements OnDestroy {
     this.subscriptions.add(
       this.sessionCreated$.subscribe((isSessionCreated) => {
           if (isSessionCreated) {
-            console.log('Session created ******');
+            console.log('Session created');
             this._isConnecting.next(false);
             this._isConnected.next(true);
             this.toggleRecording();
@@ -78,7 +78,7 @@ export class RealTimeManagerService implements OnDestroy {
   }
 
   private handleConnectionChange = (connected: boolean) => {
-    console.log('Connection status changed:', connected);
+    console.log('Connected:', connected);
     if (!connected) {
       this._messages.next([]);
       this.messageMap.clear(); 
@@ -125,21 +125,24 @@ export class RealTimeManagerService implements OnDestroy {
   }
 
   async handleAudioRecord(isRecording: boolean) {
-    const isConnected = await firstValueFrom(this.webSocketService.isConnected$);
+    const isConnected = this._isConnected.value;
     if (!isRecording && isConnected) {
-      this.recorderService.setOnDataAvailableCallback(async (buffer) => {
-        await this.webSocketService.send({ type: 'binary', data: buffer });
-      });
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          sampleRate: 24000,
-        },
-      });
-      await this.recorderService.start(stream);
-      return true;
+      try {
+        this.recorderService.setOnDataAvailableCallback(async (buffer) => {
+          await this.webSocketService.send({ type: 'binary', data: buffer });
+        });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, sampleRate: 24000 },
+        });
+        await this.recorderService.start(stream);
+        return true;
+      } catch (error) {
+        console.error('Failed to start recording:', error);
+        await this.recorderService.reset(); // Reset on failure
+        return false;
+      }
     } else {
-      this.recorderService.stop();
+      await this.recorderService.stop();
       return false;
     }
   }
@@ -239,7 +242,7 @@ export class RealTimeManagerService implements OnDestroy {
 
   async disconnect() {
     console.log('Disconnecting...');
-    this.recorderService.stop();
+    await this.recorderService.reset();
     await this.playerService.clear();
     this.webSocketService.close();
     this.messageMap.clear();
