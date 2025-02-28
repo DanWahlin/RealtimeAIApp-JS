@@ -22,8 +22,16 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
   subscription = new Subscription();
 
   async ngOnInit() {
-    await this.realtimeManagerService.init();
+    await this.setupRealTimeManager();
+  }
 
+  private async setupRealTimeManager() {
+    await this.realtimeManagerService.init();
+  
+    // Clear any existing subscription to messages$ to prevent duplicates
+    this.subscription.unsubscribe();
+    this.subscription = new Subscription();
+  
     this.subscription.add(
       this.realtimeManagerService.messages$.subscribe((messages) => {
         this.messagesChanged.emit(messages);
@@ -32,7 +40,23 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
   }
 
   async connect() {
-    await this.realtimeManagerService.connect(this.instructions);
+    if (this.realtimeManagerService.isConnected) {
+      await this.realtimeManagerService.disconnect();
+    } 
+    else {
+      const connectionSubscription = this.realtimeManagerService.connectionState$.subscribe({
+        next: (isConnected) => {
+          if (isConnected) {
+            console.log('Connection established, reinitializing');
+            this.setupRealTimeManager();
+            connectionSubscription.unsubscribe();
+          }
+        }
+      });
+      
+      this.subscription.add(connectionSubscription);      
+      await this.realtimeManagerService.connect(this.instructions);
+    }
   }
 
   async sendMessage() {

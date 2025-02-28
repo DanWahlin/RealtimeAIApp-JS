@@ -18,3 +18,5 @@ export interface WebSocketMessage {
   type: 'binary' | 'text' | 'init';
   data: ArrayBuffer | string;
 }
+
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected';

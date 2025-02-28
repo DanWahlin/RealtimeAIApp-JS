@@ -2,23 +2,24 @@ import { Injectable, OnDestroy, inject } from '@angular/core';
 import { WebSocketService } from '@core/web-socket.service';
 import { PlayerService } from '@core/player.service';
 import { RecorderService } from '@core/recorder.service';
-import { Message, WSMessage } from '@shared/interfaces';
-import { Subscription, firstValueFrom, BehaviorSubject, filter } from 'rxjs';
+import { ConnectionState, Message, WSMessage } from '@shared/interfaces';
+import { BehaviorSubject, Subject, filter, takeUntil, map } from 'rxjs';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable({
   providedIn: 'root'
 })
 export class RealTimeManagerService implements OnDestroy {
   private endpoint = 'ws://localhost:8080/realtime';
-  private subscriptions = new Subscription();
   private messageMap = new Map<string, Message>();
-  private currentUserMessage: Message | undefined = { id: '', type: '', content: '' };
+  private currentUserMessageId: string | null = null;
+  private destroy$ = new Subject<void>();
 
-  private _isConnected = new BehaviorSubject<boolean>(false);
-  isConnected$ = this._isConnected.asObservable();
+  private _connectionState = new BehaviorSubject<ConnectionState>('disconnected');
+  connectionState$ = this._connectionState.asObservable();
 
-  private _isConnecting = new BehaviorSubject<boolean>(false);
-  isConnecting$ = this._isConnecting.asObservable();
+  isConnected$ = this._connectionState.pipe(map(state => state === 'connected'));
+  isConnecting$ = this._connectionState.pipe(map(state => state === 'connecting'));
 
   private _isSessionCreated = new BehaviorSubject<boolean>(false);
   sessionCreated$ = this._isSessionCreated.asObservable();
@@ -32,83 +33,112 @@ export class RealTimeManagerService implements OnDestroy {
   private _isRecording = new BehaviorSubject<boolean>(false);
   isRecording$ = this._isRecording.asObservable();
 
+  private _error = new BehaviorSubject<string | null>(null);
+  error$ = this._error.asObservable();
+
   playerService = inject(PlayerService);
   recorderService = inject(RecorderService);
   webSocketService = inject(WebSocketService);
 
-  async init() {
-    this.playerService.init(24000);
-
-    this.subscriptions.add(
-      this.webSocketService.isConnected$.subscribe(this.handleConnectionChange)
-    );
-
-    this.subscriptions.add(
-      this.sessionCreated$.subscribe((isSessionCreated) => {
-          if (isSessionCreated) {
-            console.log('Session created');
-            this._isConnecting.next(false);
-            this._isConnected.next(true);
-            this.toggleRecording();
-          }
-      })
-    );
-
-    this.subscriptions.add(
-      this.webSocketService.messages$.subscribe(this.handleWebSocketMessage)
-    );
+  get connectionState() {
+    return this._connectionState.value;
   }
 
+  get isConnecting(): boolean {
+    return this._connectionState.value === 'connecting';
+  }
+
+  get isConnected(): boolean {
+    return this._connectionState.value === 'connected';
+  }
+
+  constructor() {
+    this.init();
+  }
+
+  /** Initialize the service */
+  async init() {
+    this.playerService.init(24000);
+  }
+
+  /** Set up WebSocket and session subscriptions */
+  private initializeSubscriptions() {
+    this.webSocketService.isConnected$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(this.handleConnectionChange);
+
+    this.sessionCreated$
+      .pipe(
+        filter(isSessionCreated => isSessionCreated && this._connectionState.value === 'connecting'),
+      )
+      .subscribe(() => {
+        console.log('Session created');
+        this._connectionState.next('connected');
+        this.toggleRecording();
+      });
+
+    this.webSocketService.messages$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(this.handleWebSocketMessage);
+  }
+
+  /** Connect to the WebSocket server */
   async connect(instructions: string) {
-    if (this._isConnected.value) {
+    if (this._connectionState.value === 'connected') {
       await this.disconnect();
       return;
-    } 
-    
-    // Start connection process
-    this._isConnecting.next(true);
+    }
+
+    this._connectionState.next('connecting');
     try {
-      // Connect will trigger WebSocketService.onopen which will emit isConnected$
+      this.initializeSubscriptions();
       await this.webSocketService.connect(this.endpoint, instructions);
+      // Session creation will trigger 'connected' state via subscription
     } catch (error) {
       this.logError('Connection failed:', error);
-      this._isConnecting.next(false);
-      this._isConnected.next(false);
+      this._connectionState.next('disconnected');
     }
   }
 
+  /** Handle WebSocket connection state changes */
   private handleConnectionChange = (connected: boolean) => {
     console.log('Connected:', connected);
     if (!connected) {
       this._messages.next([]);
-      this.messageMap.clear(); 
+      this.messageMap.clear();
     }
   };
 
+  /** Process incoming WebSocket messages */
   private handleWebSocketMessage = async (message: any) => {
     try {
-      if (message.type === 'text') {
-        const data = JSON.parse(message.data as string) as WSMessage;
+      if (message.type === 'text' && typeof message.data === 'string') {
+        const data = JSON.parse(message.data) as WSMessage;
         await this.handleWSMessage(data);
-      } 
-      else if (message.type === 'binary' && this.playerService.initialized && this._isAudioOn.value) {
-        this.playerService.play(new Int16Array(message.data as ArrayBuffer));
+      } else if (
+        message.type === 'binary' &&
+        message.data instanceof ArrayBuffer &&
+        this.playerService.initialized &&
+        this._isAudioOn.value
+      ) {
+        this.playerService.play(new Int16Array(message.data));
       }
-    } 
-    catch (error) {
+    } catch (error) {
       this.logError('Error handling WebSocket message:', error);
     }
   };
 
+  /** Log errors and emit them via error$ */
   private logError(message: string, error: any) {
-    console.error(message, error);
+    const errorMessage = `${message} ${error instanceof Error ? error.message : String(error)}`;
+    console.error(errorMessage);
+    this._error.next(errorMessage);
   }
 
+  /** Toggle audio recording state */
   async toggleRecording() {
     try {
-      console.log('this._isRecording.value:', this._isRecording.value);
       const newRecordingState = await this.handleAudioRecord(this._isRecording.value);
-      console.log('Recording:', newRecordingState);
       this._isRecording.next(newRecordingState);
       return newRecordingState;
     } catch (error) {
@@ -118,15 +148,16 @@ export class RealTimeManagerService implements OnDestroy {
     }
   }
 
+  /** Toggle audio playback state */
   toggleAudio() {
     const newState = !this._isAudioOn.value;
     this._isAudioOn.next(newState);
     return newState;
   }
 
-  async handleAudioRecord(isRecording: boolean) {
-    const isConnected = this._isConnected.value;
-    if (!isRecording && isConnected) {
+  /** Handle audio recording logic */
+  async handleAudioRecord(isRecording: boolean): Promise<boolean> {
+    if (!isRecording && this._connectionState.value === 'connected') {
       try {
         this.recorderService.setOnDataAvailableCallback(async (buffer) => {
           await this.webSocketService.send({ type: 'binary', data: buffer });
@@ -137,8 +168,8 @@ export class RealTimeManagerService implements OnDestroy {
         await this.recorderService.start(stream);
         return true;
       } catch (error) {
-        console.error('Failed to start recording:', error);
-        await this.recorderService.reset(); // Reset on failure
+        this.logError('Failed to start recording:', error);
+        await this.recorderService.reset();
         return false;
       }
     } else {
@@ -147,12 +178,16 @@ export class RealTimeManagerService implements OnDestroy {
     }
   }
 
+  /** Process WebSocket message types */
   private async handleWSMessage(message: WSMessage) {
     switch (message.type) {
       case 'transcription':
-        if (message.id) {
-          this.currentUserMessage!.content = message.text!;
-          this._messages.next(Array.from(this.messageMap.values()));
+        if (message.id && this.currentUserMessageId === message.id) {
+          const msg = this.messageMap.get(message.id);
+          if (msg) {
+            msg.content = message.text!;
+            this._messages.next(Array.from(this.messageMap.values()));
+          }
         }
         break;
       case 'text_delta':
@@ -176,7 +211,6 @@ export class RealTimeManagerService implements OnDestroy {
         switch (message.action) {
           case 'function_call_output':
             if (!message.id || !message.functionCallParams) break;
-            // Clear both _messages and messageMap before processing new function call output
             this._messages.next([]);
             this.messageMap.clear();
             userMessage = {
@@ -188,24 +222,25 @@ export class RealTimeManagerService implements OnDestroy {
             console.log('function_call_output:', userMessage);
             if (userMessage) {
               this.messageMap.set(userMessage.id, userMessage);
-              this._messages.next([userMessage]); // Emit only the new function_call_output message
+              this._messages.next([userMessage]);
             }
             break;
           case 'speech_started':
             this.playerService.clear();
-            const contrivedId = 'userMessage' + Math.random();
+            const id = uuidv4();
             userMessage = {
-              id: contrivedId,
+              id,
               type: 'user',
               content: '...',
             };
             if (userMessage) {
-              this.messageMap.set(userMessage.id, userMessage);
+              this.messageMap.set(id, userMessage);
+              this.currentUserMessageId = id;
               this._messages.next(Array.from(this.messageMap.values()));
             }
             break;
           case 'session_created':
-            this._isSessionCreated.next(true); // Update session status
+            this._isSessionCreated.next(true);
             console.log('Session created notification received:', message.id);
             break;
         }
@@ -213,16 +248,9 @@ export class RealTimeManagerService implements OnDestroy {
     }
   }
 
-  async connectWebSocket(endpoint: string, instructions: string) {
-    try {
-      this.webSocketService.connect(endpoint, instructions);
-    } catch (error) {
-      this.logError('Connection failed:', error);
-    }
-  }
-
+  /** Send a text message over WebSocket */
   async sendMessage(content: string) {
-    if (content && await firstValueFrom(this.isConnected$)) {
+    if (content && this._connectionState.value === 'connected') {
       const messageId = `user-${Date.now()}`;
       const newMessage: Message = {
         id: messageId,
@@ -240,22 +268,24 @@ export class RealTimeManagerService implements OnDestroy {
     }
   }
 
+  /** Disconnect and clean up resources */
   async disconnect() {
     console.log('Disconnecting...');
     await this.recorderService.reset();
     await this.playerService.clear();
     this.webSocketService.close();
     this.messageMap.clear();
-    this._isConnecting.next(false);
-    this._isConnected.next(false);
+    this._connectionState.next('disconnected');
     this._isSessionCreated.next(false);
     this._messages.next([]);
     this._isAudioOn.next(true);
     this._isRecording.next(false);
   }
 
+  /** Cleanup on service destruction */
   ngOnDestroy() {
-    this.subscriptions.unsubscribe();
+    this.destroy$.next();
+    this.destroy$.complete();
     this.disconnect();
   }
 }
