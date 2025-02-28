@@ -20,8 +20,6 @@
     "@angular/platform-browser": "^19.2.0",
     "@angular/platform-browser-dynamic": "^19.2.0",
     "@angular/router": "^19.2.0",
-    "deep-object-diff": "^1.1.9",
-    "rt-client": "https://github.com/Azure-Samples/aoai-realtime-audio-sdk/releases/download/js/v0.5.2/rt-client-0.5.2.tgz",
     "rxjs": "~7.8.2",
     "tslib": "^2.8.1",
     "uuid": "^11.1.0",
