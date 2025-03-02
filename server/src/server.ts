@@ -28,28 +28,55 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (ws: WebSocket) => {
-  logger.info('New WebSocket connection established');
+  logger.info('🟢 New Client websocket connection opened');
+  let rtSession: RTSession | null = null;
 
-  const handleInitMessage = (message: any) => {
-    if (!message) {
-      logger.warn('Received empty message');
-      return;
-    }
+  const handleSocketEvent = (eventType: string, data?: any) => {
+    switch (eventType) {
+      case 'message':
+        if (!data) {
+          logger.warn('Received empty message');
+          return;
+        }
 
-    try {
-      const messageString = Buffer.isBuffer(message) ? message.toString('utf8') : message.toString();
-      const parsed = JSON.parse(messageString);
-      if (parsed.type === 'init') {
-        new RTSession(ws, logger, parsed.instructions); // session.ts takes over all further messages
-        ws.off('message', handleInitMessage); // Explicitly remove this listener
-      }
-    } catch (error) {
-      logger.error({ error, message: message.toString() }, 'Failed to process init message');
+        try {
+          const messageText = data.toString();
+          const message = JSON.parse(messageText);
+
+          if (message.type === 'init') {
+            if (rtSession) {
+              logger.warn('🟠 RTSession already exists - ignoring duplicate init');
+              return;
+            }
+            logger.info('🔄 Initializing RTSession');
+            rtSession = new RTSession(ws, logger, message);
+            // Remove message handler once session is created
+            ws.off('message', messageHandler);
+          }
+        } catch (error) {
+          logger.error({ error, message: data.toString() }, '🔥 Failed to process message');
+        }
+        break;
+
+      case 'error':
+        logger.error({ error: data }, '🔥 WebSocket error occurred');
+        rtSession?.dispose();
+        rtSession = null;
+        break;
+
+      case 'close':
+        logger.info('🔴 WebSocket connection closed');
+        rtSession?.dispose();
+        rtSession = null;
+        break;
     }
   };
 
-  ws.on('message', handleInitMessage);
-  ws.on('close', () => logger.info('WebSocket connection closed'));
+  const messageHandler = (message: any) => handleSocketEvent('message', message);
+
+  ws.on('message', messageHandler);
+  ws.on('error', (error: Error) => handleSocketEvent('error', error));
+  ws.on('close', () => handleSocketEvent('close'));
 });
 
 const PORT = process.env.PORT || 8080;

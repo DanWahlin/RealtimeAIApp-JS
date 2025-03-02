@@ -38,8 +38,7 @@ export class RealTimeManagerService implements OnDestroy {
   playerService = inject(PlayerService);
   recorderService = inject(RecorderService);
   webSocketService = inject(WebSocketService);
-
-  subscription = new Subscription();
+  subscription = new Subscription
 
   get connectionState() {
     return this._connectionState.value;
@@ -53,15 +52,38 @@ export class RealTimeManagerService implements OnDestroy {
     return this._connectionState.value === 'connected';
   }
 
-  constructor() {
-    this.init();
-  }
-
   /** Initialize the service */
   async init() {
     this.playerService.init(24000);
+    this.initializeSubscriptions();
   }
 
+  /** Set up WebSocket and session subscriptions */
+  private initializeSubscriptions() {
+    this.subscription.add(
+      this.webSocketService.isConnected$
+      .subscribe(this.handleConnectionChange)
+    );
+
+    this.subscription.add(
+      this.webSocketService.messages$
+      .subscribe(this.handleWebSocketMessage)
+    );
+
+    this.subscription.add(
+      this.sessionCreated$
+      .pipe(
+        filter(isSessionCreated => isSessionCreated && this._connectionState.value === 'connecting'),
+      )
+      .subscribe(() => {
+        console.log('Session created');
+        this._connectionState.next('connected');
+        this.toggleRecording();
+      })
+    );
+  }
+
+  /** Connect to the WebSocket server */
   async connect(initMessage: InitMessage) {
     if (this._connectionState.value === 'connected') {
       await this.disconnect();
@@ -70,7 +92,6 @@ export class RealTimeManagerService implements OnDestroy {
 
     this._connectionState.next('connecting');
     try {
-      this.initializeSubscriptions();
       await this.webSocketService.connect(this.endpoint, initMessage);
       // Session creation will trigger 'connected' state via subscription
     } catch (error) {
@@ -79,34 +100,11 @@ export class RealTimeManagerService implements OnDestroy {
     }
   }
 
-  private initializeSubscriptions() {
-    this.subscription.add(
-      this.webSocketService.isConnected$
-        .subscribe(this.handleConnectionChange)
-    );
-
-    this.subscription.add(
-      this.sessionCreated$
-        .pipe(
-          filter(isSessionCreated => isSessionCreated && this._connectionState.value === 'connecting'),
-        )
-        .subscribe(() => {
-          console.log('Session created');
-          this._connectionState.next('connected');
-          this.toggleRecording();
-        })
-    );
-
-    this.subscription.add(
-      this.webSocketService.messages$
-        .subscribe(this.handleWebSocketMessage)
-    );
-  }
-
   /** Handle WebSocket connection state changes */
   private handleConnectionChange = (connected: boolean) => {
     console.log('Connected:', connected);
     if (!connected) {
+      console.log('Clearing messages and map');
       this._messages.next([]);
       this.messageMap.clear();
     }
@@ -131,7 +129,6 @@ export class RealTimeManagerService implements OnDestroy {
     }
   };
 
-  /** Log errors and emit them via error$ */
   private logError(message: string, error: any) {
     const errorMessage = `${message} ${error instanceof Error ? error.message : String(error)}`;
     console.error(errorMessage);
@@ -140,6 +137,7 @@ export class RealTimeManagerService implements OnDestroy {
 
   /** Toggle audio recording state */
   async toggleRecording() {
+    console.log('Toggling recording state. Current state is: ', this._isRecording.value);
     try {
       const newRecordingState = await this.handleAudioRecord(this._isRecording.value);
       this._isRecording.next(newRecordingState);
@@ -244,7 +242,7 @@ export class RealTimeManagerService implements OnDestroy {
             break;
           case 'session_created':
             this._isSessionCreated.next(true);
-            console.log('Session created notification received:', message.id);
+            console.log('Session created notification received for message id:', message.id);
             break;
         }
         break;
@@ -271,7 +269,6 @@ export class RealTimeManagerService implements OnDestroy {
     }
   }
 
-  /** Disconnect and clean up resources */
   async disconnect() {
     console.log('Disconnecting...');
     await this.recorderService.reset();
@@ -285,12 +282,9 @@ export class RealTimeManagerService implements OnDestroy {
     this._isRecording.next(false);
   }
 
-  async destroy() {
-    this.subscription.unsubscribe();
-    this.disconnect();
-  }
-
+  /** Cleanup on service destruction */
   ngOnDestroy() {
-    this.destroy();
+    this.disconnect();
+    this.subscription.unsubscribe();
   }
 }

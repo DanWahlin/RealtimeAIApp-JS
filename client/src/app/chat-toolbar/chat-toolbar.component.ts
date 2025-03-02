@@ -3,7 +3,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 
 import { RealTimeManagerService } from '@core/realtime-manager.service';
-import { Message } from '@shared/interfaces';
+import { InitMessage, Message } from '@shared/types';
 import { AsyncPipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 
@@ -16,7 +16,7 @@ import { Subscription } from 'rxjs';
 export class ChatToolbarComponent implements OnInit, OnDestroy {
   currentMessage = '';
   @Input() showMessageInput = true;
-  @Input() instructions = '';
+  @Input() initMessage = {} as InitMessage;
   @Output() messagesChanged = new EventEmitter<Message[]>();
   realtimeManagerService = inject(RealTimeManagerService);
   subscription = new Subscription();
@@ -44,10 +44,10 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
       await this.realtimeManagerService.disconnect();
     } 
     else {
-      const connectionSubscription = this.realtimeManagerService.connectionState$.subscribe({
+      const connectionSubscription = this.realtimeManagerService.isConnected$.subscribe({
         next: (isConnected) => {
           if (isConnected) {
-            console.log('Connection established, reinitializing');
+            console.log('Client session established. Setting up real-time manager.');
             this.setupRealTimeManager();
             connectionSubscription.unsubscribe();
           }
@@ -55,7 +55,7 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
       });
       
       this.subscription.add(connectionSubscription);      
-      await this.realtimeManagerService.connect(this.instructions);
+      await this.realtimeManagerService.connect(this.initMessage);
     }
   }
 

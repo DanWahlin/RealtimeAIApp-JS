@@ -2,15 +2,15 @@
   "name": "server",
   "version": "1.0.0",
   "main": "dist/server.js",
+  "author": "Dan Wahlin",
+  "license": "ISC",
+  "description": "Realtime OpenAI demo showing real-time text and speech. Learn a language or complete a form using your voice.",
   "type": "module",
   "scripts": {
     "start": "tsc && node dist/server.js",
     "build": "tsc",
-    "dev": "tsc --watch & nodemon dist/server.js"
+    "dev": "tsc && concurrently \"tsc --watch\" \"nodemon dist/server.js\""
   },
-  "author": "Dan Wahlin",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "@azure/identity": "^4.7.0",
     "cors": "^2.8.5",
@@ -25,6 +25,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.4",
     "@types/ws": "^8.5.14",
+    "concurrently": "^9.1.2",
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.3",

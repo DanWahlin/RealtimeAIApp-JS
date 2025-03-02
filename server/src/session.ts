@@ -3,21 +3,8 @@ import { Logger } from 'pino';
 import { DefaultAzureCredential } from '@azure/identity';
 import { config } from 'dotenv';
 import * as crypto from 'crypto';
+import { InitMessage, WSMessage } from './types';
 config({ path: '../.env' });
-
-type WSMessage =
-  | { id: string; type: 'text_delta'; delta: string }
-  | { id?: string; type: 'transcription'; text: string }
-  | { id: string; type: 'user_message'; text: string }
-  | { type: 'control'; action: 'speech_started' | 'connected' | 'text_done' | 'function_call_output'; functionCallParams?: string; id?: string }
-  | { type: 'control'; action: 'session_created'; id?: string }; // Added for session created notification
-
-// Function call response type for clarity (optional, retained for future-proofing)
-interface FunctionCallResponse {
-  type: 'function_call_output';
-  call_id: string;
-  output: string;
-}
 
 const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT } = process.env as Record<string, string>;
 
@@ -27,33 +14,6 @@ const SESSION_CONFIG = {
   input_audio_format: 'pcm16',
   input_audio_transcription: { model: 'whisper-1' },
   turn_detection: { type: 'server_vad', threshold: 0.4, silence_duration_ms: 600 },
-  tools: [{
-    type: 'function',
-    name: 'get_json_object',
-    description: 'Converts text into a JSON object based upon a JSON schema',
-    parameters: {
-      type: 'object',
-      properties: {
-        tab: { type: 'string', enum: ['Patient', 'Symptoms', 'Vitals'] },
-        information: { 
-          type: 'object', 
-          properties: { 
-            name: { type: 'string' }, 
-            dob: { 
-              type: 'string', 
-              format: 'date', // Indicates it's a date
-              pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
-            },
-            gender: { type: 'string', enum: ['male', 'female'] } 
-          }, 
-          required: ['name', 'dob', 'gender'] 
-        },
-        symptoms: { type: 'array', items: { type: 'object', properties: { id: { type: 'number' }, description: { type: 'string' }, duration: { type: 'string' }, severity: { type: 'number' } }, required: ['id', 'description', 'duration', 'severity'] } },
-        vitals: { type: 'object', properties: { temperature: { type: 'number' }, bloodPressure: { type: 'string' }, heartRate: { type: 'number' } }, required: ['temperature', 'bloodPressure', 'heartRate'] },
-      },
-      required: ['tab', 'information', 'symptoms', 'vitals'],
-    },
-  }],
   tool_choice: 'auto',
 };
 
@@ -83,27 +43,50 @@ const REALTIME_SERVER_EVENTS = {
   ResponseOutputItemAdded: 'response.output_item.added',
   ResponseOutputItemDone: 'response.output_item.done',
   ResponseFunctionCallArgumentsDone: 'response.function_call_arguments.done',
-} as const;
+};
 
 export class RTSession {
   private readonly sessionId = crypto.randomUUID();
-  private readonly logger: Logger;
   private openAIWs!: WebSocket;
 
   constructor(
     private readonly clientWs: WebSocket,
-    logger: Logger,
-    private readonly instructions: string
+    private readonly logger: Logger,
+    private initMessage: InitMessage
   ) {
     this.logger = logger.child({ sessionId: this.sessionId });
-    this.logger.info({ instructions }, 'Instructions received');
-    this.initialize().catch((error) => this.logger.error({ error }, 'Failed to initialize session'));
+    this.logger.info({ message: this.initMessage.message }, '✅ Init message received');
+    this.initialize().catch((error) => this.logger.error({ error }, '🔥 Failed to initialize session'));
   }
 
   private async initialize() {
     this.openAIWs = await this.initializeRealtimeWebSocket();
+    this.updateSessionInstructions();
     this.setupEventHandlers();
-    this.logger.info('New session created');
+  }
+
+  public updateInitMessage(initMessage: InitMessage) {
+    this.logger.info({ message: initMessage.message }, 'Updating instructions');
+    this.initMessage = initMessage;
+
+    // Send the updated instructions to the OpenAI WebSocket
+    this.updateSessionInstructions();
+  }
+
+  private updateSessionInstructions() {
+    if (this.openAIWs && this.openAIWs.readyState === WebSocket.OPEN) {
+      this.openAIWs.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          instructions: this.initMessage.message,
+          tools: this.initMessage.tools,
+          ...SESSION_CONFIG
+        }
+      }));
+      this.logger.info('✅ Session configuration sent');
+    } else {
+      this.logger.warn('🔌 Cannot update session: WebSocket not open');
+    }
   }
 
   private initializeRealtimeWebSocket(): Promise<WebSocket> {
@@ -113,20 +96,21 @@ export class RTSession {
 
     return new Promise(async (resolve, reject) => {
       const headers = await this.getWebSocketHeaders();
-      const ws = new WebSocket(url, { headers });
-      ws.on('open', () => {
-        ws.send(JSON.stringify({ type: 'session.update', session: { instructions: this.instructions, ...SESSION_CONFIG } }));
-        resolve(ws);
+      const openAIWs = new WebSocket(url, { headers });
+
+      openAIWs.on('open', () => {
+        this.logger.info('🟢 OpenAI WebSocket connection opened');
+        resolve(openAIWs);
       });
-      ws.on('error', (error) => reject(error));
+
+      openAIWs.on('error', (error) => reject(error));
     });
   }
-
   private async getWebSocketHeaders(): Promise<{ [key: string]: string }> {
     if (BACKEND === 'azure') {
       const token = await new DefaultAzureCredential().getToken('https://cognitiveservices.azure.com/.default');
-      if (!token?.token) throw new Error('Failed to retrieve Azure access token');
-      this.logger.info('Azure access token retrieved successfully');
+      if (!token?.token) throw new Error('🔥 Failed to retrieve Azure access token');
+      this.logger.info('✅ Azure access token retrieved successfully');
       return { Authorization: `Bearer ${token.token}`, 'OpenAI-Beta': 'realtime=v1' };
     }
     if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
@@ -140,17 +124,25 @@ export class RTSession {
   }
 
   private sendBinary(data: ArrayBuffer) {
-    if (this.clientWs.readyState === WebSocket.OPEN) this.clientWs.send(Buffer.from(data), { binary: true });
+    if (this.clientWs.readyState === WebSocket.OPEN) {
+      this.clientWs.send(Buffer.from(data), { binary: true });
+    }
   }
 
   private setupEventHandlers() {
     this.clientWs.on('message', (data: RawData, isBinary) => this.handleClientMessage(data, isBinary));
-    this.clientWs.on('close', () => this.close());
-    this.clientWs.on('error', (error) => this.logger.error({ error }, 'WebSocket error occurred'));
+    this.clientWs.on('close', () => {
+      this.logger.info('🔴 Client websocket closed');
+      this.dispose();
+    });
+    this.clientWs.on('error', (error) => this.logger.error({ error }, '🔥 Client websocket error occurred'));
 
     this.openAIWs.on('message', (data) => this.handleRealtimeMessage(data));
-    this.openAIWs.on('error', (error) => this.logger.error({ error }, 'Realtime WebSocket error'));
-    this.openAIWs.on('close', () => this.logger.info('Realtime WebSocket closed'));
+    this.openAIWs.on('error', (error) => this.logger.error({ error }, '🔥 OpenAI realtime websocket error'));
+    this.openAIWs.on('close', () => {
+      this.logger.info('🔴 OpenAI realtime websocket closed');
+      this.dispose();
+    });
   }
 
   private handleRealtimeMessage(data: RawData) {
@@ -160,21 +152,21 @@ export class RTSession {
 
       const handlers: Partial<Record<keyof typeof REALTIME_SERVER_EVENTS, (event: any) => void>> = {
         SessionCreated: (event) => {
-          this.logger.info({ session_id: event.session?.id }, 'Session created');
+          this.logger.info({ session_id: event.session?.id }, '✅ Session created');
           // Send a message to the client to update the UI
           this.send({ type: 'control', action: 'session_created', id: this.sessionId });
         },
-        SessionUpdated: () => this.logger.info('Session configuration updated'),
+        SessionUpdated: () => this.logger.info('✅ Session configuration updated'),
         InputAudioBufferSpeechStarted: () => this.send({ type: 'control', action: 'speech_started' }),
         InputAudioBufferCommitted: () => {
           if (event.transcript) {
             this.send({ type: 'transcription', text: event.transcript });
-            this.logger.debug({ transcriptionLength: event.transcript.length }, 'Input audio processed successfully');
+            this.logger.debug({ transcriptionLength: event.transcript.length }, '✅ Input audio processed successfully');
           }
         },
-        InputAudioBufferCleared: () => this.logger.debug('Input audio buffer cleared'),
+        InputAudioBufferCleared: () => this.logger.debug('✅ Input audio buffer cleared'),
         ResponseAudioDelta: () => event.delta && this.sendBinary(Buffer.from(event.delta, 'base64')),
-        ResponseAudioDone: () => this.logger.debug({ item_id: event.item_id }, 'Audio response completed'),
+        ResponseAudioDone: () => this.logger.debug({ item_id: event.item_id }, '✅ Audio response completed'),
         ResponseAudioTranscriptDelta: () => {
           if (event.delta) {
             const contentId = event.item_id || this.sessionId;
@@ -196,17 +188,17 @@ export class RTSession {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
-        ResponseFunctionCallArgumentsDelta: () => this.logger.debug('Ignoring function call arguments delta for simplicity'),
+        ResponseFunctionCallArgumentsDelta: () => this.logger.debug('✅ Ignoring function call arguments delta for simplicity'),
         ResponseFunctionCallArgumentsDone: (event: any) => this.handleFunctionCallArgumentsDone(event),
-        ResponseDone: () => this.logger.debug({ response_id: event.response?.id }, 'Response generation completed'),
-        Error: () => this.logger.error({ error: event.error }, 'Realtime API error'),
-        ConversationItemCreated: () => this.logger.debug({ item: event.item }, 'Conversation item created'),
-        ConversationItemInputAudioTranscriptionCompleted: () => this.logger.debug({ item_id: event.item_id, transcript: event.transcript }, 'Transcription completed'),
-        ConversationItemInputAudioTranscriptionFailed: () => this.logger.error({ error: event.error }, 'Transcription failed'),
-        ResponseCreated: () => this.logger.debug('Response created'),
-        RateLimitsUpdated: () => this.logger.debug('Rate limits updated'),
-        ResponseOutputItemAdded: () => this.logger.debug('Response output item added'),
-        ResponseOutputItemDone: () => this.logger.debug('Response output item done'),
+        ResponseDone: () => this.logger.debug({ response_id: event.response?.id }, '✅ Response generation completed'),
+        Error: () => this.logger.error({ error: event.error }, '🔥 Realtime API error'),
+        ConversationItemCreated: () => this.logger.debug({ item: event.item }, '✅ Conversation item created'),
+        ConversationItemInputAudioTranscriptionCompleted: () => this.logger.debug({ item_id: event.item_id, transcript: event.transcript }, '✅ Transcription completed'),
+        ConversationItemInputAudioTranscriptionFailed: () => this.logger.error({ error: event.error }, '🔥 Transcription failed'),
+        ResponseCreated: () => this.logger.debug('✅ Response created'),
+        RateLimitsUpdated: () => this.logger.debug('✅ Rate limits updated'),
+        ResponseOutputItemAdded: () => this.logger.debug('✅ Response output item added'),
+        ResponseOutputItemDone: () => this.logger.debug('✅ Response output item done'),
       };
 
       // Map the incoming event.type to the corresponding key in REALTIME_SERVER_EVENTS
@@ -218,10 +210,10 @@ export class RTSession {
         handler(event);
       }
       else {
-        this.logger.debug({ type: event.type }, 'Unhandled event type');
+        this.logger.debug({ type: event.type }, '🟠 Unhandled event type');
       }
     } catch (error) {
-      this.logger.error({ error, message: data.toString() }, 'Error processing realtime message');
+      this.logger.error({ error, message: data.toString() }, '🔥 Error processing realtime message');
     }
   }
 
@@ -233,7 +225,7 @@ export class RTSession {
         this.handleTextMessage(data);
       }
     } catch (error) {
-      this.logger.error({ error }, 'Error handling message');
+      this.logger.error({ error }, '🔥 Error handling message');
     }
   }
 
@@ -248,38 +240,83 @@ export class RTSession {
 
   private handleTextMessage(data: RawData) {
     const parsed = JSON.parse(data.toString()) as WSMessage;
-    this.logger.debug({ parsed }, 'Received client message');
+    this.logger.debug({ parsed }, '✅ Received client message');
     if (parsed.type === 'user_message' && this.openAIWs.readyState === WebSocket.OPEN) {
       this.openAIWs.send(JSON.stringify({
         type: 'conversation.item.create',
         item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: parsed.text }] },
       }));
       this.openAIWs.send(JSON.stringify({ type: 'response.create' }));
-      this.logger.debug('User message processed successfully');
+      this.logger.debug('✅ User message processed successfully');
     }
-  }
-
-  private close() {
-    this.logger.info('Session closing');
-    if (this.openAIWs.readyState !== WebSocket.CLOSED) this.openAIWs.close();
-    this.logger.info('Session closed successfully');
   }
 
   private handleFunctionCallArgumentsDone({ call_id, arguments: args }: { call_id: string; arguments: string }) {
     try {
-      this.logger.debug({ call_id, arguments: args }, 'Function call arguments completed');
+      this.logger.debug({ call_id, arguments: args }, '✅ Function call arguments completed');
       if (args) {
-        this.send({ 
-          type: 'control', 
-          action: 'function_call_output', 
-          id: call_id, 
+        this.send({
+          type: 'control',
+          action: 'function_call_output',
+          id: call_id,
           functionCallParams: args
         });
       } else {
-        this.logger.warn({ call_id }, 'No arguments provided in function call arguments done event');
+        this.logger.warn({ call_id }, '🟠 No arguments provided in function call arguments done event');
       }
     } catch (error) {
-      this.logger.error({ error, call_id }, 'Error processing completed function call arguments');
+      this.logger.error({ error, call_id }, '🔥 Error processing completed function call arguments');
     }
+  }
+
+  private removeAllEventListeners() {
+    // Remove all client WebSocket event listeners
+    if (this.clientWs) {
+      this.clientWs.removeAllListeners('message');
+      this.clientWs.removeAllListeners('close');
+      this.clientWs.removeAllListeners('error');
+      this.logger.debug('✅ Removed client WebSocket event listeners');
+    }
+
+    // Remove all OpenAI WebSocket event listeners
+    if (this.openAIWs) {
+      this.openAIWs.removeAllListeners('message');
+      this.openAIWs.removeAllListeners('close');
+      this.openAIWs.removeAllListeners('error');
+      this.logger.debug('✅ Removed OpenAI WebSocket event listeners');
+    }
+  }
+
+  private close() {
+    this.logger.info('🔄 Session closing');
+
+    this.removeAllEventListeners();
+
+    if (this.clientWs && this.clientWs.readyState !== WebSocket.CLOSED &&
+      this.clientWs.readyState !== WebSocket.CLOSING) {
+      this.clientWs.close();
+    }
+
+    if (this.openAIWs && this.openAIWs.readyState !== WebSocket.CLOSED &&
+      this.openAIWs.readyState !== WebSocket.CLOSING) {
+      this.openAIWs.close();
+    }
+
+    this.logger.info('🔴 Session closed successfully');
+  }
+
+  dispose() {
+    this.logger.info('🔴 Disposing session');
+
+    // Close connections and remove event listeners
+    this.close();
+
+    // Allow garbage collection by nullifying references
+    // This helps break any potential circular references
+    (this as any).openAIWs = null;
+    (this as any).initMessage = null;
+
+    this.logger.info('Session disposed');
+    this.logger.flush();
   }
 }

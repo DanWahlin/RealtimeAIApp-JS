@@ -17,7 +17,7 @@ export class RecorderService {
   private workletBlobUrl: string | null = null;
   private isRecording = false; //track if recording has started
 
-  public constructor() {}
+  public constructor() { }
 
   setOnDataAvailableCallback(callback: (buffer: ArrayBuffer) => void) {
     this.onDataAvailable = callback;
@@ -98,14 +98,15 @@ export class RecorderService {
           },
         }
       );
+      
       this.workletNode.port.onmessage = (event) => {
         if (this.onDataAvailable) {
           this.onDataAvailable(event.data);
         }
       };
-      
-        this.mediaStreamSource.connect(this.workletNode);
-        this.workletNode.connect(this.audioContext.destination);
+
+      this.mediaStreamSource.connect(this.workletNode);
+      this.workletNode.connect(this.audioContext.destination);
     } catch (error) {
       console.error('Error starting recorder:', error);
       this.stop();
@@ -136,7 +137,7 @@ export class RecorderService {
   }
 
   async reset() {
-      console.log("Recorder Reset called")
+    console.log("Recorder Reset called")
     await this.stop();
     this.onDataAvailable = (buffer) => {
       // Default callback in case it isn't set

@@ -46,10 +46,16 @@ export class PlayerService {
         `],
         { type: 'application/javascript' }));
       await this.audioContext.audioWorklet.addModule(playbackWorkletBlobUrl);
-      this.playbackNode = new AudioWorkletNode(this.audioContext, 'playback-worklet');
-      this.playbackNode.connect(this.audioContext.destination);
-      console.log(`audioContext.destination = ${this.audioContext.destination.channelInterpretation}`);
-      this.initialized = true;
+      // Give the browser some time to initialize the module
+      setTimeout(() => {
+        if (this.audioContext  && !this.initialized) {
+          this.playbackNode = new AudioWorkletNode(this.audioContext, 'playback-worklet');
+          this.playbackNode.connect(this.audioContext.destination);
+          console.log(`audioContext.destination = ${this.audioContext.destination.channelInterpretation}`);
+          this.initialized = true;
+        }
+      }, 100);
+
     }
   }
 

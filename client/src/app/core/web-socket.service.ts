@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { WebSocketMessage } from '@shared/interfaces';
+import { InitMessage, WebSocketMessage } from '@shared/types';
 import { BehaviorSubject, Subject } from 'rxjs';
 
 @Injectable({
@@ -10,10 +10,10 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
 
   private _message = new Subject<WebSocketMessage>();
   messages$ = this._message.asObservable();
-  
+
   private _isConnected = new BehaviorSubject<boolean>(false);
   isConnected$ = this._isConnected.asObservable();
-  
+
   private _errors = new Subject<Error>();
   errors$ = this._errors.asObservable();
 
@@ -21,17 +21,22 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
   private messageQueue: WebSocketMessage[] = [];
   private hasError = false;
 
-  connect(url: string, instructions: string): void {
+  connect(url: string, initMessage: InitMessage): void {
     if (this.socket) this.close();
 
     this.socket = new WebSocket(url);
     this.socket.binaryType = 'arraybuffer';
 
+    // const initMessage = {
+    //   role: 'system',
+    //   message: instructions
+    // };
+
     this.socket.onopen = () => {
       this._isConnected.next(true);
-      this.send({ 
-        type: 'text', 
-        data: JSON.stringify({ type: 'init', instructions })
+      this.send({
+        type: 'text',
+        data: JSON.stringify({ type: 'init', ...initMessage })
       });
     };
     this.socket.onclose = () => this._isConnected.next(false);
@@ -77,5 +82,16 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
   close() {
     this.socket?.close();
     this.socket = null;
+    this.messageQueue = [];
+    this.hasError = false;
+    this._isConnected.next(false);
+
+    // Instead of completing the subjects, recreate them
+    this._errors = new Subject<Error>();
+    this._message = new Subject<WebSocketMessage>();
+
+    // Update the exposed observables to reference the new subjects
+    this.errors$ = this._errors.asObservable();
+    this.messages$ = this._message.asObservable();
   }
 }

@@ -9,39 +9,12 @@ import { ChatToolbarComponent } from '../chat-toolbar/chat-toolbar.component';
 import { MatIconModule } from '@angular/material/icon';
 import { UtilitiesService } from '@core/utilities.service';
 import { RealTimeManagerService } from '@core/realtime-manager.service';
-import { Message } from '@shared/interfaces';
-
-enum PatientTab {
-  Patient = 'Patient',
-  Symptoms = 'Symptoms',
-  Vitals = 'Vitals'
-}
-
-interface Symptom {
-  id: number;
-  description: string;
-  duration: string;
-  severity: number;
-}
-
-interface Patient {
-  tab: PatientTab;
-  information: { name: string; dob: string; gender: string };
-  symptoms: Symptom[];
-  vitals: { temperature: number; bloodPressure: string; heartRate: number };
-}
+import { InitMessage, Message, Patient, PatientTab, Symptom } from '@shared/types';
 
 @Component({
   selector: 'app-medical-form',
-  imports: [
-    CommonModule,
-    FormsModule,
-    MatTabsModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-    MatSelectModule,
-    ChatToolbarComponent
+  imports: [ CommonModule, FormsModule, MatTabsModule, MatFormFieldModule, MatIconModule,
+    MatInputModule, MatSelectModule, ChatToolbarComponent
   ],
   templateUrl: './medical-form.component.html',
   styleUrl: './medical-form.component.css'
@@ -56,7 +29,9 @@ export class MedicalFormComponent implements OnInit {
     symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1 }],
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };
-  instructions = `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's personal information, symptoms, and vitals.
+  initMessage: InitMessage = {
+    role: 'system',
+    message: `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's personal information, symptoms, and vitals.
     This JSON object conforms to the following schema: 
 
     ${this.createJsonSchema()}
@@ -72,7 +47,35 @@ export class MedicalFormComponent implements OnInit {
     Send back the full updated Patient object, not just changes, unless explicitly requested otherwise.
 
     Always invoke the function call output tooling (get_json_object function) with the updated JSON object that matches the defined function call parameters.
-  `;
+  `,
+    tools: [{
+      type: 'function',
+      name: 'get_json_object',
+      description: 'Converts text into a JSON object based upon a JSON schema',
+      parameters: {
+        type: 'object',
+        properties: {
+          tab: { type: 'string', enum: ['Patient', 'Symptoms', 'Vitals'] },
+          information: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              dob: {
+                type: 'string',
+                format: 'date', // Indicates it's a date
+                pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
+              },
+              gender: { type: 'string', enum: ['male', 'female'] }
+            },
+            required: ['name', 'dob', 'gender']
+          },
+          symptoms: { type: 'array', items: { type: 'object', properties: { id: { type: 'number' }, description: { type: 'string' }, duration: { type: 'string' }, severity: { type: 'number' } }, required: ['id', 'description', 'duration', 'severity'] } },
+          vitals: { type: 'object', properties: { temperature: { type: 'number' }, bloodPressure: { type: 'string' }, heartRate: { type: 'number' } }, required: ['temperature', 'bloodPressure', 'heartRate'] },
+        },
+        required: ['tab', 'information', 'symptoms', 'vitals'],
+      },
+    }],
+  };
   selectedTabIndex = 0;
   // Use definite assignment assertion (!) to indicate patient will be assigned in ngOnInit
   patient!: Patient;
@@ -192,13 +195,13 @@ export class MedicalFormComponent implements OnInit {
         // Create new references for changed nested objects/arrays to ensure proxy detects changes
         if (key === 'tab') {
           oldModel.tab = newModel.tab;
-        } 
+        }
         else if (key === 'information') {
           oldModel.information = { ...oldModel.information, ...newModel.information };
-        } 
+        }
         else if (key === 'symptoms') {
           oldModel.symptoms = this.mergeSymptoms(newModel.symptoms, oldModel.symptoms);
-        } 
+        }
         else if (key === 'vitals') {
           oldModel.vitals = { ...oldModel.vitals, ...newModel.vitals };
         }
@@ -215,7 +218,7 @@ export class MedicalFormComponent implements OnInit {
   private mergeModel(partialModel: Partial<Patient>): Patient {
     // console.log('Patient:', this.patient);
     // console.log('Partial patient:', partialModel);
-    const mergedPatient = { 
+    const mergedPatient = {
       tab: partialModel.tab || this.patient.tab,
       information: { ...this.patient.information, ...partialModel.information },
       symptoms: this.mergeSymptoms(partialModel.symptoms || [], this.patient.symptoms),
