@@ -6,15 +6,17 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ChatToolbarComponent } from '../chat-toolbar/chat-toolbar.component';
-import { MatIconModule } from '@angular/material/icon';
 import { UtilitiesService } from '@core/utilities.service';
 import { RealTimeManagerService } from '@core/realtime-manager.service';
 import { InitMessage, Message, Patient, PatientTab, Symptom } from '@shared/types';
+import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   selector: 'app-medical-form',
-  imports: [ CommonModule, FormsModule, MatTabsModule, MatFormFieldModule, MatIconModule,
-    MatInputModule, MatSelectModule, ChatToolbarComponent
+  imports: [ CommonModule, FormsModule, MatButtonModule, MatTabsModule, MatFormFieldModule, MatIconModule,
+    MatInputModule, MatSelectModule, MatChipsModule, MatIconModule, ChatToolbarComponent
   ],
   templateUrl: './medical-form.component.html',
   styleUrl: './medical-form.component.css'
@@ -29,24 +31,27 @@ export class MedicalFormComponent implements OnInit {
     symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1 }],
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };
+  formSubmitted = false;
   initMessage: InitMessage = {
     role: 'system',
-    message: `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's personal information, symptoms, and vitals.
-    This JSON object conforms to the following schema: 
+    message: `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's 
+    personal information, symptoms, and vitals. The "patientData" JSON object conforms to the following schema: 
 
     ${this.createJsonSchema()}
 
-    If the user says "Patient", return a value of "Patient" for the "tab" property.
-    If the user says "Symptom" or "Symptoms", return a value of "Symptoms" for the "tab" property.
-    If the user says "Vitals", return a value of "Vitals" for the "tab" property.
-  
-    Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
-    Each time they provide information that can be added to the JSON object, update the JSON object, and then save it.
-    Do not attempt to correct their mistakes.
-    After sending the updated object, just reply OK.
-    Send back the full updated Patient object, not just changes, unless explicitly requested otherwise.
+    Rules:
 
-    Always invoke the function call output tooling (get_json_object function) with the updated JSON object that matches the defined function call parameters.
+    - If the user says "patient", return a value of "patient" for the "tab" property.
+    - If the user says "symptom" or "symptoms", return a value of "symptom" for the "tab" property.
+    - If the user says "vitals", return a value of "vitals" for the "tab" property.
+  
+    - Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen unless
+      you need clarification. If clarification is required then be as concise as possible with your response.
+    - Each time they provide information that can be added to the JSON object, update the JSON object, and then save it. Do not attempt to correct their mistakes.
+    - After sending the updated object, just reply OK.
+    - Send back the full updated Patient object, not just the changes, unless explicitly requested otherwise.
+    - If the user asks for emoticons to be added, add them only to string properties of the JSON object. Do not add emoticons to numbers or booleans.
+    - Always invoke the function call output tooling (get_json_object function) with the updated JSON object that matches the defined function call parameters.
   `,
     tools: [{
       type: 'function',
@@ -55,7 +60,7 @@ export class MedicalFormComponent implements OnInit {
       parameters: {
         type: 'object',
         properties: {
-          tab: { type: 'string', enum: ['Patient', 'Symptoms', 'Vitals'] },
+          tab: { type: 'string', enum: ['patient', 'symptoms', 'vitals'] },
           information: {
             type: 'object',
             properties: {
@@ -94,7 +99,7 @@ export class MedicalFormComponent implements OnInit {
     return JSON.stringify(this.utilitiesService.generateSchemaFromObject(this.patient));
   }
 
-  private onPatientChanged(): void {
+  private onPatientChanged() {
     if (this.isUpdating) return;
     const now = Date.now();
     if (now - this.lastUpdateTimestamp < this.DEBOUNCE_DELAY) return; // Debounce to prevent rapid updates
@@ -175,6 +180,8 @@ export class MedicalFormComponent implements OnInit {
         const newModel = JSON.parse(functionCallOutputMessages[0].content) as Partial<Patient>;
         const mergedNewModel = this.mergeModel(newModel);
         this.patient = mergedNewModel;
+        // update selected tab index
+        this.selectedTabIndex = this.tabs.indexOf(this.patient.tab);
         // const modelChanged = this.updateModelProperties(this.patient, mergedNewModel);
         console.log('patient changed:', this.patient);
       } catch (error) {
@@ -244,5 +251,10 @@ export class MedicalFormComponent implements OnInit {
 
   private notifyFieldChanged(model: Patient, fieldNames: string): void {
     console.log(`Field changed: ${fieldNames} in model`, model);
+  }
+
+  submitForm() {
+    console.log('Form submitted:', this.patient);
+    this.formSubmitted = true;
   }
 }

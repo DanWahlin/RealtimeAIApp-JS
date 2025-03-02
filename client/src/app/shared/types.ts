@@ -28,9 +28,9 @@ export type InitMessage = {
 };
 
 export enum PatientTab {
-  Patient = 'Patient',
-  Symptoms = 'Symptoms',
-  Vitals = 'Vitals'
+  Patient = 'patient',
+  Symptoms = 'symptoms',
+  Vitals = 'vitals'
 }
 
 export type Symptom = {
