@@ -17,6 +17,9 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
   private _errors = new Subject<Error>();
   errors$ = this._errors.asObservable();
 
+  get isConnected(): boolean {
+    return this._isConnected.value;
+  }
 
   private messageQueue: WebSocketMessage[] = [];
   private hasError = false;

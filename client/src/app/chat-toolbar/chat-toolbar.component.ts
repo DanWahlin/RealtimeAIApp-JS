@@ -35,9 +35,6 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
   }
 
   private async setupRealTimeManager() {
-    await this.realtimeManagerService.init();
-
-    // Clear any existing subscription to messages$ to prevent duplicates
     this.subscription.unsubscribe();
     this.subscription = new Subscription();
 
@@ -48,7 +45,6 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
     );
   }
 
-  // Add method to get available microphones
   async getAvailableMicrophones() {
     try {
       // Check if we have permissions first
