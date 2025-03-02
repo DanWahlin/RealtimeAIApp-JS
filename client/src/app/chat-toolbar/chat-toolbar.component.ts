@@ -2,7 +2,8 @@ import { Component, OnInit, OnDestroy, inject, EventEmitter, Output, Input } fro
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule } from '@angular/material/select';
-import { MatMenuModule } from '@angular/material/menu'; // Add this import
+import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 import { RealTimeManagerService } from '@core/realtime-manager.service';
 import { InitMessage, Message } from '@shared/types';
@@ -13,7 +14,7 @@ import { Subscription } from 'rxjs';
   selector: 'app-chat-toolbar',
   templateUrl: './chat-toolbar.component.html',
   styleUrls: ['./chat-toolbar.component.css'],
-  imports: [AsyncPipe, MatIconModule, MatButtonModule, MatSelectModule, MatMenuModule]
+  imports: [AsyncPipe, MatIconModule, MatButtonModule, MatSelectModule, MatMenuModule, MatProgressSpinnerModule ]
 })
 export class ChatToolbarComponent implements OnInit, OnDestroy {
   currentMessage = '';
@@ -69,7 +70,7 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
       // Only show selector if we have multiple microphones
       this.showMicrophoneSelector = this.availableMicrophones.length > 1;
 
-      console.log('Available microphones:', this.availableMicrophones);
+      // console.log('Available microphones:', this.availableMicrophones);
     } catch (error) {
       console.error('Error getting microphones:', error);
     }

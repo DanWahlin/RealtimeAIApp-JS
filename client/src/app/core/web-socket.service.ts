@@ -27,11 +27,6 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
     this.socket = new WebSocket(url);
     this.socket.binaryType = 'arraybuffer';
 
-    // const initMessage = {
-    //   role: 'system',
-    //   message: instructions
-    // };
-
     this.socket.onopen = () => {
       this._isConnected.next(true);
       this.send({

@@ -143,9 +143,13 @@ export class RealTimeManagerService implements OnDestroy {
   }
 
   async toggleRecording(constraints?: MediaStreamConstraints) {
-    try {
+    try {     
       const newRecordingState = await this.handleAudioRecord(this._isRecording.value, constraints);
       this._isRecording.next(newRecordingState);
+      
+      // If we stopped recording, we don't need the loading indicator anymore
+      if (!newRecordingState) {
+      }      
       return newRecordingState;
     } catch (error) {
       this.logError('Recording error:', error);
@@ -179,6 +183,8 @@ export class RealTimeManagerService implements OnDestroy {
     if (!isRecording && this._connectionState.value === 'connected') {
       try {
         this.recorderService.setOnDataAvailableCallback(async (buffer) => {
+          // This is called whenever audio data is available to send
+          //this._isLoading.next(true); // Keep loading true while sending audio
           await this.webSocketService.send({ type: 'binary', data: buffer });
         });
         
@@ -205,74 +211,76 @@ export class RealTimeManagerService implements OnDestroy {
   }
 
   /** Process WebSocket message types */
-  private async handleWSMessage(message: WSMessage) {
-    switch (message.type) {
-      case 'transcription':
-        if (message.id && this.currentUserMessageId === message.id) {
-          const msg = this.messageMap.get(message.id);
-          if (msg) {
-            msg.content = message.text!;
-            this._messages.next(Array.from(this.messageMap.values()));
-          }
-        }
-        break;
-      case 'text_delta':
-        if (message.id) {
-          const existingMessage = this.messageMap.get(message.id);
-          if (existingMessage) {
-            existingMessage.content += message.delta!;
-          } else {
-            const newMessage: Message = {
-              id: message.id,
-              type: 'assistant',
-              content: message.delta!,
-            };
-            this.messageMap.set(message.id, newMessage);
-          }
+private async handleWSMessage(message: WSMessage) {
+  switch (message.type) {
+    case 'transcription':
+      if (message.id && this.currentUserMessageId === message.id) {
+        const msg = this.messageMap.get(message.id);
+        if (msg) {
+          msg.content = message.text!;
           this._messages.next(Array.from(this.messageMap.values()));
         }
-        break;
-      case 'control':
-        let userMessage: Message | null = null;
-        switch (message.action) {
-          case 'function_call_output':
-            if (!message.id || !message.functionCallParams) break;
-            this._messages.next([]);
-            this.messageMap.clear();
-            userMessage = {
-              id: message.id,
-              type: message.type,
-              action: message.action,
-              content: message.functionCallParams,
-            };
-            console.log('function_call_output:', userMessage);
-            if (userMessage) {
-              this.messageMap.set(userMessage.id, userMessage);
-              this._messages.next([userMessage]);
-            }
-            break;
-          case 'speech_started':
-            this.playerService.clear();
-            const id = uuidv4();
-            userMessage = {
-              id,
-              type: 'user',
-              content: '...',
-            };
-            if (userMessage) {
-              this.messageMap.set(id, userMessage);
-              this.currentUserMessageId = id;
-              this._messages.next(Array.from(this.messageMap.values()));
-            }
-            break;
-          case 'session_created':
-            this._isSessionCreated.next(true);
-            console.log('Session created notification received:', message.id);
-            break;
+      }
+      break;
+    case 'text_delta':
+      if (message.id) {
+        const existingMessage = this.messageMap.get(message.id);
+        if (existingMessage) {
+          existingMessage.content += message.delta!;
+        } else {
+          const newMessage: Message = {
+            id: message.id,
+            type: 'assistant',
+            content: message.delta!,
+          };
+          this.messageMap.set(message.id, newMessage);
         }
-        break;
-    }
+        this._messages.next(Array.from(this.messageMap.values()));
+      }
+      break;
+    case 'control':
+      let userMessage: Message | null = null;
+      switch (message.action) {
+        case 'function_call_output':
+          if (!message.id || !message.functionCallParams) break;
+          this._messages.next([]);
+          this.messageMap.clear();
+          userMessage = {
+            id: message.id,
+            type: message.type,
+            action: message.action,
+            content: message.functionCallParams,
+          };
+          console.log('function_call_output:', userMessage);
+          if (userMessage) {
+            this.messageMap.set(userMessage.id, userMessage);
+            this._messages.next([userMessage]);
+          }
+          break;
+        case 'speech_started':
+          this.playerService.clear();
+          const id = uuidv4();
+          userMessage = {
+            id,
+            type: 'user',
+            content: '...',
+          };
+          if (userMessage) {
+            this.messageMap.set(id, userMessage);
+            this.currentUserMessageId = id;
+            this._messages.next(Array.from(this.messageMap.values()));
+          }
+          // Don't set _isLoading to false here, keep it true until we get a response
+          // this._isLoading.next(false); - Remove this line
+          break;
+        case 'session_created':
+          this._isSessionCreated.next(true);
+          console.log('Session created notification received:', message.id);
+          break;
+      }
+      break;
   }
+}
 
   /** Send a text message over WebSocket */
   async sendMessage(content: string) {
