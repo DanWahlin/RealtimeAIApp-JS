@@ -2,24 +2,47 @@
   <button (click)="connect()" [disabled]="(realtimeManagerService.isConnecting$ | async)!"
     title="{{ (realtimeManagerService.isConnected$ | async) ? 'Disconnect' : 'Connect' }}">
     @if (realtimeManagerService.isConnecting$ | async) {
-      Connecting...
+    Connecting...
     } @else if (realtimeManagerService.isConnected$ | async) {
-      Disconnect
+    Disconnect
     } @else {
-      Connect
+    Connect
     }
   </button>
 
   @if (this.realtimeManagerService.isConnected$ | async) {
   <span class="chat-toolbar">
-    <span (click)="toggleRecording()">
-      @if (realtimeManagerService.isRecording$ | async) {
-      <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">
+    <!-- Microphone with dropdown arrow -->
+    <div class="mic-container">
+      <span (click)="toggleRecording()">
+        @if (realtimeManagerService.isRecording$ | async) {
+        <img src="/images/microphone-on.svg" alt="Mic On" title="Mic On" class="microphone">
+        }
+        @else {
+        <img src="/images/microphone-off.svg" alt="Mic Off" title="Mic Off" class="microphone">
+        }
+      </span>
+
+      <!-- Dropdown trigger -->
+      @if (availableMicrophones.length > 0) {
+      <button mat-icon-button [matMenuTriggerFor]="micMenu" title="Select Microphone" class="dropdown-arrow no-border">
+        <mat-icon class="custom-dropdown-icon">arrow_drop_down</mat-icon>
+      </button>
+
+      <!-- Dropdown Menu -->
+      <mat-menu #micMenu="matMenu">
+        @for (mic of availableMicrophones; track mic.deviceId; let i = $index) {
+        <button mat-menu-item [class.selected]="mic.deviceId === selectedMicrophoneId"
+          (click)="selectMicrophone(mic.deviceId)">
+          {{ mic.label || 'Microphone ' + (i + 1) }}
+          @if (mic.deviceId === selectedMicrophoneId) {
+          <mat-icon>check</mat-icon>
+          }
+        </button>
+        }
+      </mat-menu>
       }
-      @else {
-      <img src="/images/microphone-off.svg" alt="Mic Off" title="Mic Off" class="microphone">
-      }
-    </span>
+    </div>
 
     <span (click)="toggleAudio()">
       @if (realtimeManagerService.isAudioOn$ | async) {
@@ -37,11 +60,10 @@
         (keyup.enter)="sendMessage()" />
       &nbsp;&nbsp;
       <button (click)="sendMessage()" title="Send Message">
-        Send Message
+        Send
       </button>
     </span>
     }
   </span>
   }
-
 </div>

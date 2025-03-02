@@ -53,6 +53,10 @@ export class RealTimeManagerService implements OnDestroy {
     return this._connectionState.value === 'connected';
   }
 
+  get isRecording(): boolean {
+    return this._isRecording.value;
+  }
+
   constructor() {
     this.init();
   }
@@ -138,10 +142,9 @@ export class RealTimeManagerService implements OnDestroy {
     this._error.next(errorMessage);
   }
 
-  /** Toggle audio recording state */
-  async toggleRecording() {
+  async toggleRecording(constraints?: MediaStreamConstraints) {
     try {
-      const newRecordingState = await this.handleAudioRecord(this._isRecording.value);
+      const newRecordingState = await this.handleAudioRecord(this._isRecording.value, constraints);
       this._isRecording.next(newRecordingState);
       return newRecordingState;
     } catch (error) {
@@ -151,6 +154,20 @@ export class RealTimeManagerService implements OnDestroy {
     }
   }
 
+  async startRecording(constraints?: MediaStreamConstraints): Promise<boolean> {
+    if (!this._isRecording.value && this._connectionState.value === 'connected') {
+      return this.toggleRecording(constraints);
+    }
+    return this._isRecording.value;
+  }
+
+  async stopRecording(): Promise<boolean> {
+    if (this._isRecording.value) {
+      return this.toggleRecording();
+    }
+    return false;
+  }
+
   /** Toggle audio playback state */
   toggleAudio() {
     const newState = !this._isAudioOn.value;
@@ -158,16 +175,22 @@ export class RealTimeManagerService implements OnDestroy {
     return newState;
   }
 
-  /** Handle audio recording logic */
-  async handleAudioRecord(isRecording: boolean): Promise<boolean> {
+  async handleAudioRecord(isRecording: boolean, constraints?: MediaStreamConstraints): Promise<boolean> {
     if (!isRecording && this._connectionState.value === 'connected') {
       try {
         this.recorderService.setOnDataAvailableCallback(async (buffer) => {
           await this.webSocketService.send({ type: 'binary', data: buffer });
         });
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, sampleRate: 24000 },
-        });
+        
+        // Use provided constraints or default ones
+        const streamConstraints = constraints || {
+          audio: { 
+            echoCancellation: true, 
+            sampleRate: 24000 
+          }
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(streamConstraints);
         await this.recorderService.start(stream);
         return true;
       } catch (error) {
