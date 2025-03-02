@@ -1,6 +1,6 @@
 # Realtime AI App - Language Coach and Medical Form Assistant
 
-This project demonstrates how to build a real-time AI application using the Azure OpenAI Realtime API. The demo app features a language coach and a medical form assistant. The language coach allows users to practice speaking a language and get instant feedback on their pronunciation, while the medical form assistant helps users fill out medical forms by conversing with them using real-time audio.
+This project demonstrates how to build a real-time AI application using the Azure OpenAI Realtime API. The demo app features a language coach and a medical form assistant. The language coach allows users to practice speaking a language and get instant feedback on their pronunciation, while the medical form assistant helps users fill out medical forms by conversing with them using their voice.
 
 ## Getting Started
 
@@ -72,3 +72,7 @@ graph TD
     style C fill:#dfd,stroke:#333,stroke-width:2px
     style D fill:#bbf,stroke:#333,stroke-width:2px
     style E fill:#f9f,stroke:#333,stroke-width:2px
+
+## Acknowledgements
+
+Thanks to [Steve Sanderson](https://github.com/SteveSandersonMS) for the initial inspiration for this demo. He showed me an example of using the Realtime API at the VS Live Orlando conference in late 2024. I thought it would be fun to build a language coach and medical form assistant using the same technology. Check out Steve's .NET demo [here](https://github.com/stevesandersonms/realtimeaiapp) to see how he uses the Realtime API to allow users to complete a vehicle form using their voice.
