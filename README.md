@@ -3,7 +3,7 @@
 ## Run the Project
 
 1. Clone the project.
-2. Create a `gpt-4o-realtime-preview` in [Azure AI Foundry](https://ai.azure.com).
+2. Create a `gpt-4o-realtime-preview` model deployment in [Azure AI Foundry](https://ai.azure.com).
 3. Rename `.env.example` to `.env` in the root of the project.
 4. Add your `gpt-4o-realtime-preview` endpoint to `OPENAI_ENDPOINT` and your key to `OPENAI_API_KEY`. You can get those values from Azure AI Foundry.
 
