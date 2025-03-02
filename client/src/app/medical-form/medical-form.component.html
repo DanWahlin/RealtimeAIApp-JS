@@ -21,6 +21,11 @@
                         <mat-option value="female">Female</mat-option>
                     </mat-select>
                 </mat-form-field>
+
+                <mat-form-field>
+                    <mat-label>Notes</mat-label>
+                    <textarea matInput [(ngModel)]="patient.information.notes" title="Patient notes"></textarea>
+                </mat-form-field>
             </div>
         </mat-tab>
 
@@ -47,6 +52,11 @@
                             <mat-label>Severity (1-10)</mat-label>
                             <input matInput type="number" min="1" max="10" [(ngModel)]="symptom.severity"
                                 title="Rate severity from 1 (mild) to 10 (severe)">
+                        </mat-form-field>
+
+                        <mat-form-field>
+                            <mat-label>Notes</mat-label>
+                            <textarea matInput [(ngModel)]="symptom.notes" title="Symptom notes"></textarea>
                         </mat-form-field>
                     </div>
                 }

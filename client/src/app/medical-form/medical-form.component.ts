@@ -15,7 +15,7 @@ import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   selector: 'app-medical-form',
-  imports: [ CommonModule, FormsModule, MatButtonModule, MatTabsModule, MatFormFieldModule, MatIconModule,
+  imports: [CommonModule, FormsModule, MatButtonModule, MatTabsModule, MatFormFieldModule, MatIconModule,
     MatInputModule, MatSelectModule, MatChipsModule, MatIconModule, ChatToolbarComponent
   ],
   templateUrl: './medical-form.component.html',
@@ -27,17 +27,47 @@ export class MedicalFormComponent implements OnInit {
   private utilitiesService = inject(UtilitiesService);
   private initialPatientData: Patient = {
     tab: PatientTab.Patient,
-    information: { name: '', dob: '', gender: '' },
-    symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1 }],
+    information: { name: '', dob: '', gender: '', notes: '' },
+    symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1, notes: '' }],
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };
   formSubmitted = false;
+  jsonSchema = {
+    type: 'object',
+    properties: {
+      tab: { type: 'string', enum: ['patient', 'symptoms', 'vitals'] },
+      information: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          dob: {
+            type: 'string',
+            format: 'date', // Indicates it's a date
+            pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
+          },
+          gender: { type: 'string', enum: ['male', 'female'] },
+          notes: { type: 'string' }
+        },
+        required: ['name', 'dob', 'gender']
+      },
+      symptoms: {
+        type: 'array', items:
+        {
+          type: 'object', properties: { id: { type: 'number' }, description: { type: 'string' }, duration: { type: 'string' }, severity: { type: 'number' }, notes: { type: 'string' } },
+          required: ['id', 'description', 'duration', 'severity']
+        }
+      },
+      vitals: { type: 'object', properties: { temperature: { type: 'number' }, bloodPressure: { type: 'string' }, heartRate: { type: 'number' } }, required: ['temperature', 'bloodPressure', 'heartRate'] },
+    },
+    required: ['tab', 'information', 'symptoms', 'vitals'],
+  };
   initMessage: InitMessage = {
+    type: 'init',
     role: 'system',
     message: `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's 
     personal information, symptoms, and vitals. The "patientData" JSON object conforms to the following schema: 
 
-    ${this.createJsonSchema()}
+    ${JSON.stringify(this.jsonSchema)}
 
     Rules:
 
@@ -45,42 +75,26 @@ export class MedicalFormComponent implements OnInit {
     - If the user says "symptom" or "symptoms", return a value of "symptom" for the "tab" property.
     - If the user says "vitals", return a value of "vitals" for the "tab" property.
   
-    - Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen unless
-      you need clarification. If clarification is required then be as concise as possible with your response.
-    - Each time they provide information that can be added to the JSON object, update the JSON object, and then save it. Do not attempt to correct their mistakes.
+    - Listen to the user and collect information from them. Do not reply to them unless they explicitly 
+      ask for your input. Just listen unless you need clarification. If clarification is required then 
+      be as concise as possible with your response.
+    - Each time they provide information that can be added to the JSON object, update the JSON object, 
+      and then save it. Do not attempt to correct their mistakes.
     - After sending the updated object, just reply OK.
     - Send back the full updated Patient object, not just the changes, unless explicitly requested otherwise.
-    - If the user asks for emoticons to be added, add them only to string properties of the JSON object. Do not add emoticons to numbers or booleans.
-    - Always invoke the function call output tooling (get_json_object function) with the updated JSON object that matches the defined function call parameters.
+    - If the user asks for emoticons to be added, add them only to string properties of the 
+      JSON object. Do not add emoticons to numbers or booleans.
+    - Always invoke the function call output tooling (get_json_object function) with the updated 
+      JSON object that matches the defined function call parameters.
   `,
     tools: [{
       type: 'function',
       name: 'get_json_object',
       description: 'Converts text into a JSON object based upon a JSON schema',
-      parameters: {
-        type: 'object',
-        properties: {
-          tab: { type: 'string', enum: ['patient', 'symptoms', 'vitals'] },
-          information: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              dob: {
-                type: 'string',
-                format: 'date', // Indicates it's a date
-                pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
-              },
-              gender: { type: 'string', enum: ['male', 'female'] }
-            },
-            required: ['name', 'dob', 'gender']
-          },
-          symptoms: { type: 'array', items: { type: 'object', properties: { id: { type: 'number' }, description: { type: 'string' }, duration: { type: 'string' }, severity: { type: 'number' } }, required: ['id', 'description', 'duration', 'severity'] } },
-          vitals: { type: 'object', properties: { temperature: { type: 'number' }, bloodPressure: { type: 'string' }, heartRate: { type: 'number' } }, required: ['temperature', 'bloodPressure', 'heartRate'] },
-        },
-        required: ['tab', 'information', 'symptoms', 'vitals'],
-      },
+      parameters: this.jsonSchema
     }],
   };
+
   selectedTabIndex = 0;
   // Use definite assignment assertion (!) to indicate patient will be assigned in ngOnInit
   patient!: Patient;
@@ -93,10 +107,7 @@ export class MedicalFormComponent implements OnInit {
   ngOnInit() {
     // Create proxy with a no-arg callback that calls onPatientChanged
     this.patient = this.utilitiesService.createProxy(this.initialPatientData, () => this.onPatientChanged());
-  }
-
-  createJsonSchema(): string {
-    return JSON.stringify(this.utilitiesService.generateSchemaFromObject(this.patient));
+    console.log(this.initMessage)
   }
 
   private onPatientChanged() {
@@ -160,7 +171,7 @@ export class MedicalFormComponent implements OnInit {
   }
 
   addSymptom(): void {
-    this.patient.symptoms.push({ id: this.nextSymptomId++, description: '', duration: '', severity: 1 });
+    this.patient.symptoms.push({ id: this.nextSymptomId++, description: '', duration: '', severity: 1, notes: '' });
   }
 
   removeSymptom(id: number): void {
@@ -251,6 +262,10 @@ export class MedicalFormComponent implements OnInit {
 
   private notifyFieldChanged(model: Patient, fieldNames: string): void {
     console.log(`Field changed: ${fieldNames} in model`, model);
+  }
+
+  createJsonSchema(): string {
+    return JSON.stringify(this.utilitiesService.generateSchemaFromObject(this.initialPatientData));
   }
 
   submitForm() {

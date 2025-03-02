@@ -34,7 +34,7 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
       this._isConnected.next(true);
       this.send({
         type: 'text',
-        data: JSON.stringify({ type: 'init', ...initMessage })
+        data: JSON.stringify(initMessage)
       });
     };
     this.socket.onclose = () => this._isConnected.next(false);

@@ -98,19 +98,16 @@ mat-form-field {
 .form-actions {
   display: flex;
   align-items: center;
-  margin-top: 20px;
-  margin-left: 20px;
+  margin-top: 40px;
   gap: 16px;
 }
 
 .form-actions button {
-  flex: 0 0 auto;
   padding: 8px 12px;
   border: none;
   background-color: #0078d7;
   color: white;
   border-radius: 4px;
-  margin-top: 20px;
   cursor: pointer;
 }
 

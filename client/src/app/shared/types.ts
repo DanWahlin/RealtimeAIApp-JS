@@ -22,6 +22,7 @@ export type WebSocketMessage = {
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
 export type InitMessage = { 
+  type: 'init';
   role: string; 
   message: string; 
   tools: any[]; 
@@ -38,11 +39,12 @@ export type Symptom = {
   description: string;
   duration: string;
   severity: number;
+  notes: string;
 }
 
 export type Patient = {
   tab: PatientTab;
-  information: { name: string; dob: string; gender: string };
+  information: { name: string; dob: string; gender: string, notes: string };
   symptoms: Symptom[];
   vitals: { temperature: number; bloodPressure: string; heartRate: number };
 }
