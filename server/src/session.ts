@@ -6,7 +6,7 @@ import * as crypto from 'crypto';
 import { InitMessage, WSMessage } from './types';
 config({ path: '../.env' });
 
-const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT } = process.env as Record<string, string>;
+const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT, OPENAI_API_VERSION } = process.env as Record<string, string>;
 
 const SESSION_CONFIG = {
   modalities: ['text', 'audio'],
@@ -90,9 +90,10 @@ export class RTSession {
   }
 
   private initializeRealtimeWebSocket(): Promise<WebSocket> {
-    const url = BACKEND === 'azure'
-      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=2024-10-01-preview`
-      : 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01';
+    this.logger.info(OPENAI_API_VERSION, '✅ OpenAI API version');
+    const url = (BACKEND === 'azure')
+      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=${OPENAI_API_VERSION}-preview`
+      : `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-${OPENAI_API_VERSION}`;
 
     return new Promise(async (resolve, reject) => {
       const headers = await this.getWebSocketHeaders();

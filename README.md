@@ -3,8 +3,28 @@
 ## Run the Project
 
 1. Clone the project.
-1. Create a `gpt-4o-realtime-preview` in Azure AI Foundry.
-1. If running locally, run the following to add the OpenAI Contributor role to your user principal.
+2. Create a `gpt-4o-realtime-preview` in [Azure AI Foundry](https://ai.azure.com).
+3. Rename `.env.example` to `.env` in the root of the project.
+4. Add your `gpt-4o-realtime-preview` endpoint to `OPENAI_ENDPOINT` and your key to `OPENAI_API_KEY`. You can get those values from Azure AI Foundry.
+
+  ```
+  OPENAI_API_KEY=
+  OPENAI_ENDPOINT=
+  OPENAI_DEPLOYMENT=gpt-4o-realtime-preview
+  OPENAI_API_VERSION=2024-10-01
+  BACKEND=azure
+  ```
+
+> Note: If you'd like to use OpenAI instead of Azure OpenAI, add your OpenAI API key to `OPENAI_API_KEY` and leave the `OPENAI_ENDPOINT` blank. Remove the value for `BACKEND`.
+
+4. Run `npm install` in the `client` and `server` directories.
+5. Run `npm run dev` in the `server` directory.
+6. Run `npm start` in the `client` directory.
+7. Click the `Connect` button in the browser to get started, allow your microphone to be accessed, and start speaking.
+8. Click the `Disconnect` button to stop the session.
+## Keyless Approach
+
+If you'd like to use the more secure "keyless" approach with Azure OpenAI, run the following command to add the *OpenAI Contributor* role to your user principal. Install the [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) if you don't have it on your machine already.
 
 ```
 az role assignment create \
@@ -14,18 +34,13 @@ az role assignment create \
   --assignee-principal-type User
 ```
 
-1. Add an `.env` file to the root of the project and add the Azure deployment name and endpoint. If running locally run the following to 
+Add your *subscription ID*, *resource group*, and user *principal ID* (assigness-object-id) to the command above. 
+- Run `az login` and select your target subscription.
+- Get your subscription ID by running `az account list --query "[?isDefault].id" -o tsv`.
+- Find your user principal ID by running `az ad signed-in-user show --query objectId -o tsv` or `az rest --method GET --url "https://graph.microsoft.com/v1.0/me" --query "id"`.
 
-```
-OPENAI_API_KEY=
-OPENAI_ENDPOINT=
-OPENAI_DEPLOYMENT=gpt-4o-realtime-preview
-```
+You can then remove the `OPENAI_API_KEY` value your `.env` file.
 
-2. Run `npm i` in the `client` and `server` directories.
-3. Run `npm run dev` in the `server` directory.
-4. Run `npm start` in the `client` directory.
-5. Click the `Connect` button in the browser to get started.
 
 ## Architecture Overview
 
