@@ -71,10 +71,9 @@ export class MedicalFormComponent implements OnInit {
 
     Rules:
 
-    - If the user says "patient", return a value of "patient" for the "tab" property.
-    - If the user says "symptom" or "symptoms", return a value of "symptom" for the "tab" property.
-    - If the user says "vitals", return a value of "vitals" for the "tab" property.
-  
+    - If the user says "patient" or "patient tab", return a value of "patient" for the "tab" property.
+    - If the user says "symptom" or "symptoms" or "symptom tab", return a value of "symptoms" for the "tab" property.
+    - If the user says "vitals" or "vitals tab", return a value of "vitals" for the "tab" property.  
     - Listen to the user and collect information from them. Do not reply to them unless they explicitly 
       ask for your input. Just listen unless you need clarification. If clarification is required then 
       be as concise as possible with your response.
@@ -107,7 +106,6 @@ export class MedicalFormComponent implements OnInit {
   ngOnInit() {
     // Create proxy with a no-arg callback that calls onPatientChanged
     this.patient = this.utilitiesService.createProxy(this.initialPatientData, () => this.onPatientChanged());
-    console.log(this.initMessage)
   }
 
   private onPatientChanged() {
@@ -188,7 +186,7 @@ export class MedicalFormComponent implements OnInit {
     if (functionCallOutputMessages.length && !this.isUpdating) {
       this.isUpdating = true;
       try {
-        const newModel = JSON.parse(functionCallOutputMessages[0].content) as Partial<Patient>;
+        const newModel = JSON.parse(functionCallOutputMessages[0].content) as Patient;
         const mergedNewModel = this.mergeModel(newModel);
         this.patient = mergedNewModel;
         // update selected tab index
@@ -250,11 +248,33 @@ export class MedicalFormComponent implements OnInit {
     // Create a map of existing symptoms by id for efficient lookup and merging
     const symptomMap = new Map<number, Symptom>();
     existingSymptoms.forEach(symptom => symptomMap.set(symptom.id, { ...symptom }));
-
+  
+    // Track which symptom IDs are present in the new symptoms
+    const newSymptomIds = new Set<number>();
+    
     // Merge new symptoms, updating existing ones or adding new ones
     newSymptoms.forEach(newSymptom => {
       symptomMap.set(newSymptom.id, { ...symptomMap.get(newSymptom.id), ...newSymptom });
+      newSymptomIds.add(newSymptom.id);
     });
+    
+    // If we have specifically received a new symptoms array (not just an empty array from optional chaining)
+    if (Array.isArray(newSymptoms)) {
+      // Remove symptoms that aren't present in the new symptoms array
+      existingSymptoms.forEach(symptom => {
+        // Only remove a symptom if it doesn't exist in the new symptoms list
+        if (!newSymptomIds.has(symptom.id)) {
+          symptomMap.delete(symptom.id);
+        }
+      });
+    }
+  
+    // If there are no symptoms, add this.initialPatientData.symptoms value
+    if (newSymptoms.length === 0) {
+      this.initialPatientData.symptoms.forEach(symptom => {
+        symptomMap.set(symptom.id, { ...symptom });
+      });
+    }
 
     // Convert map back to array, maintaining order (sort by id for consistency)
     return Array.from(symptomMap.values()).sort((a, b) => a.id - b.id);
