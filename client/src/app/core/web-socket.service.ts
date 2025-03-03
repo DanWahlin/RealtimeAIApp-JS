@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { InitMessage, WebSocketMessage } from '@shared/types';
+import { SystemMessageType, WebSocketMessage } from '@shared/types';
 import { BehaviorSubject, Subject } from 'rxjs';
 
 @Injectable({
@@ -24,7 +24,7 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
   private messageQueue: WebSocketMessage[] = [];
   private hasError = false;
 
-  connect(url: string, initMessage: InitMessage): void {
+  connect(url: string, systemMessageType: SystemMessageType) {
     if (this.socket) this.close();
 
     this.socket = new WebSocket(url);
@@ -34,7 +34,7 @@ export class WebSocketService implements AsyncIterable<WebSocketMessage> {
       this._isConnected.next(true);
       this.send({
         type: 'text',
-        data: JSON.stringify(initMessage)
+        data: JSON.stringify({ type: 'init', systemMessageType })
       });
     };
     this.socket.onclose = () => this._isConnected.next(false);

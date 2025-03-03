@@ -21,13 +21,6 @@ export type WebSocketMessage = {
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
-export type InitMessage = { 
-  type: 'init';
-  role: string; 
-  message: string; 
-  tools: any[]; 
-};
-
 export enum PatientTab {
   Patient = 'patient',
   Symptoms = 'symptoms',
@@ -48,3 +41,5 @@ export type Patient = {
   symptoms: Symptom[];
   vitals: { temperature: number; bloodPressure: string; heartRate: number };
 }
+
+export type SystemMessageType = 'language-coach' | 'medical-form';

@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import { pino } from 'pino';
 import { RTSession } from './session.js';
+import { getSystemMessage } from './systemMessages.js';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'debug',
@@ -41,15 +42,21 @@ wss.on('connection', (ws: WebSocket) => {
 
         try {
           const messageText = data.toString();
-          const message = JSON.parse(messageText);
+          const initSystemMessage = JSON.parse(messageText);
 
-          if (message.type === 'init') {
+          if (initSystemMessage.type === 'init') {
             if (rtSession) {
               logger.warn('🟠 RTSession already exists - ignoring duplicate init');
               return;
             }
+
             logger.info('🔄 Initializing RTSession');
-            rtSession = new RTSession(ws, logger, message);
+
+            // Grab system message and any tools from systemMessages.ts
+            const systemMessage = getSystemMessage(initSystemMessage.systemMessageType);
+            logger.info( { systemMessage }, 'System message retrieved');
+            
+            rtSession = new RTSession(ws, logger, systemMessage);
             // Remove message handler once session is created
             ws.off('message', messageHandler);
           }

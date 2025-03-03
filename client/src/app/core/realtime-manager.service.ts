@@ -2,7 +2,7 @@ import { Injectable, OnDestroy, inject } from '@angular/core';
 import { WebSocketService } from '@core/web-socket.service';
 import { PlayerService } from '@core/player.service';
 import { RecorderService } from '@core/recorder.service';
-import { ConnectionState, InitMessage, Message, WSMessage, WebSocketMessage } from '@shared/types';
+import { ConnectionState, Message, SystemMessageType, WSMessage, WebSocketMessage } from '@shared/types';
 import { BehaviorSubject, Subscription, filter, map } from 'rxjs';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -56,7 +56,7 @@ export class RealTimeManagerService implements OnDestroy {
     return this._isRecording.value;
   }
 
-  async connect(initMessage: InitMessage) {
+  async connect(systemMessageType: SystemMessageType) {
     if (this._connectionState.value === 'connected') {
       await this.disconnect();
       return;
@@ -69,7 +69,7 @@ export class RealTimeManagerService implements OnDestroy {
     this._connectionState.next('connecting');
     try {
       this.initializeSubscriptions();
-      await this.webSocketService.connect(this.endpoint, initMessage);
+      await this.webSocketService.connect(this.endpoint, systemMessageType);
       // Session creation will trigger 'connected' state via subscription
     } catch (error) {
       this.logError('Connection failed:', error);

@@ -16,3 +16,16 @@ export type FunctionCallResponse = {
     call_id: string;
     output: string;
 }
+
+export type SystemMessageTool = {
+    type?: string,
+    name?: string,
+    description?: string,
+    parameters?: any
+}
+
+export type SystemMessage = {
+    type: 'language-coach' | 'medical-form';
+    message: string;
+    tools: SystemMessageTool[];
+}

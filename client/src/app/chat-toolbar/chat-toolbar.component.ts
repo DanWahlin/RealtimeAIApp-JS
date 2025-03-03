@@ -6,7 +6,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 import { RealTimeManagerService } from '@core/realtime-manager.service';
-import { InitMessage, Message } from '@shared/types';
+import { SystemMessageType, Message } from '@shared/types';
 import { AsyncPipe } from '@angular/common';
 import { Subscription } from 'rxjs';
 
@@ -19,7 +19,7 @@ import { Subscription } from 'rxjs';
 export class ChatToolbarComponent implements OnInit, OnDestroy {
   currentMessage = '';
   @Input() showMessageInput = true;
-  @Input() initMessage = {} as InitMessage;
+  @Input() systemMessageType!: SystemMessageType;
   @Output() messagesChanged = new EventEmitter<Message[]>();
   realtimeManagerService = inject(RealTimeManagerService);
   subscription = new Subscription();
@@ -117,7 +117,7 @@ export class ChatToolbarComponent implements OnInit, OnDestroy {
       });
 
       this.subscription.add(connectionSubscription);
-      await this.realtimeManagerService.connect(this.initMessage);
+      await this.realtimeManagerService.connect(this.systemMessageType);
     }
   }
 

@@ -3,10 +3,10 @@ import { Logger } from 'pino';
 import { DefaultAzureCredential } from '@azure/identity';
 import { config } from 'dotenv';
 import * as crypto from 'crypto';
-import { InitMessage, WSMessage } from './types';
+import { InitMessage, SystemMessage, WSMessage } from './types';
 config({ path: '../.env' });
 
-const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT, OPENAI_API_VERSION } = process.env as Record<string, string>;
+const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT } = process.env as Record<string, string>;
 
 const SESSION_CONFIG = {
   modalities: ['text', 'audio'],
@@ -52,10 +52,12 @@ export class RTSession {
   constructor(
     private readonly clientWs: WebSocket,
     private readonly logger: Logger,
-    private initMessage: InitMessage
+    private systemMessage: SystemMessage | null
   ) {
+    if (!this.systemMessage) throw new Error('🔥 System message is required');
+
     this.logger = logger.child({ sessionId: this.sessionId });
-    this.logger.info({ message: this.initMessage.message }, '✅ Init message received');
+    this.logger.info({ message: this.systemMessage.message }, '✅ Init message received');
     this.initialize().catch((error) => this.logger.error({ error }, '🔥 Failed to initialize session'));
   }
 
@@ -65,21 +67,21 @@ export class RTSession {
     this.setupEventHandlers();
   }
 
-  public updateInitMessage(initMessage: InitMessage) {
-    this.logger.info({ message: initMessage.message }, 'Updating instructions');
-    this.initMessage = initMessage;
+  // public updateInitMessage(systemMessage: SystemMessage) {
+  //   this.logger.info({ message: systemMessage.message }, 'Updating instructions');
+  //   this.systemMessage = systemMessage;
 
-    // Send the updated instructions to the OpenAI WebSocket
-    this.updateSessionInstructions();
-  }
+  //   // Send the updated instructions to the OpenAI WebSocket
+  //   this.updateSessionInstructions();
+  // }
 
   private updateSessionInstructions() {
-    if (this.openAIWs && this.openAIWs.readyState === WebSocket.OPEN) {
+    if (this.openAIWs && this.openAIWs.readyState === WebSocket.OPEN && this.systemMessage) {
       this.openAIWs.send(JSON.stringify({
         type: 'session.update',
         session: {
-          instructions: this.initMessage.message,
-          tools: this.initMessage.tools,
+          instructions: this.systemMessage.message,
+          tools: this.systemMessage.tools,
           ...SESSION_CONFIG
         }
       }));
@@ -90,10 +92,9 @@ export class RTSession {
   }
 
   private initializeRealtimeWebSocket(): Promise<WebSocket> {
-    this.logger.info(OPENAI_API_VERSION, '✅ OpenAI API version');
-    const url = (BACKEND === 'azure')
-      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=${OPENAI_API_VERSION}-preview`
-      : `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-${OPENAI_API_VERSION}`;
+    const url = BACKEND === 'azure'
+      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=2024-10-01-preview`
+      : 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01';
 
     return new Promise(async (resolve, reject) => {
       const headers = await this.getWebSocketHeaders();

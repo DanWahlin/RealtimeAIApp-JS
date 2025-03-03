@@ -8,7 +8,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { ChatToolbarComponent } from '../chat-toolbar/chat-toolbar.component';
 import { UtilitiesService } from '@core/utilities.service';
 import { RealTimeManagerService } from '@core/realtime-manager.service';
-import { InitMessage, Message, Patient, PatientTab, Symptom } from '@shared/types';
+import { Message, Patient, PatientTab, Symptom, SystemMessageType } from '@shared/types';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
@@ -32,67 +32,7 @@ export class MedicalFormComponent implements OnInit {
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };
   formSubmitted = false;
-  jsonSchema = {
-    type: 'object',
-    properties: {
-      tab: { type: 'string', enum: ['patient', 'symptoms', 'vitals'] },
-      information: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          dob: {
-            type: 'string',
-            format: 'date', // Indicates it's a date
-            pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
-          },
-          gender: { type: 'string', enum: ['male', 'female'] },
-          notes: { type: 'string' }
-        },
-        required: ['name', 'dob', 'gender']
-      },
-      symptoms: {
-        type: 'array', items:
-        {
-          type: 'object', properties: { id: { type: 'number' }, description: { type: 'string' }, duration: { type: 'string' }, severity: { type: 'number' }, notes: { type: 'string' } },
-          required: ['id', 'description', 'duration', 'severity']
-        }
-      },
-      vitals: { type: 'object', properties: { temperature: { type: 'number' }, bloodPressure: { type: 'string' }, heartRate: { type: 'number' } }, required: ['temperature', 'bloodPressure', 'heartRate'] },
-    },
-    required: ['tab', 'information', 'symptoms', 'vitals'],
-  };
-  initMessage: InitMessage = {
-    type: 'init',
-    role: 'system',
-    message: `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's 
-    personal information, symptoms, and vitals. The "patientData" JSON object conforms to the following schema: 
-
-    ${JSON.stringify(this.jsonSchema)}
-
-    Rules:
-
-    - If the user says "patient" or "patient tab", return a value of "patient" for the "tab" property.
-    - If the user says "symptom" or "symptoms" or "symptom tab", return a value of "symptoms" for the "tab" property.
-    - If the user says "vitals" or "vitals tab", return a value of "vitals" for the "tab" property.  
-    - Listen to the user and collect information from them. Do not reply to them unless they explicitly 
-      ask for your input. Just listen unless you need clarification. If clarification is required then 
-      be as concise as possible with your response.
-    - Each time they provide information that can be added to the JSON object, update the JSON object, 
-      and then save it. Do not attempt to correct their mistakes.
-    - After sending the updated object, just reply OK.
-    - Send back the full updated Patient object, not just the changes, unless explicitly requested otherwise.
-    - If the user asks for emoticons to be added, add them only to string properties of the 
-      JSON object. Do not add emoticons to numbers or booleans.
-    - Always invoke the function call output tooling (get_json_object function) with the updated 
-      JSON object that matches the defined function call parameters.
-  `,
-    tools: [{
-      type: 'function',
-      name: 'get_json_object',
-      description: 'Converts text into a JSON object based upon a JSON schema',
-      parameters: this.jsonSchema
-    }],
-  };
+  systemMessageType: SystemMessageType = 'medical-form';
 
   selectedTabIndex = 0;
   // Use definite assignment assertion (!) to indicate patient will be assigned in ngOnInit
