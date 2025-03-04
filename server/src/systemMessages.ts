@@ -31,9 +31,9 @@ const systemMessages: SystemMessage[] = [
 
             ${getMedicalJSONSchema()}
 
-            If the user says "Patient", return a value of "Patient" for the "tab" property.
-            If the user says "Symptom" or "Symptoms", return a value of "Symptoms" for the "tab" property.
-            If the user says "Vitals", return a value of "Vitals" for the "tab" property.
+            If the user says "patient", return a value of "patient" for the "tab" property.
+            If the user says "symptom" or "symptoms", return a value of "symptoms" for the "tab" property.
+            If the user says "vitals", return a value of "vitals" for the "tab" property.
         
             Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
             Each time they provide information that can be added to the JSON object, update the JSON object, and then save it.
