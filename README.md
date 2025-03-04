@@ -51,11 +51,11 @@ The following diagram illustrates the WebSocket communication flow in the `RTSes
 ```mermaid
 %%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 75}}}%%
 graph TD
-    A[Client] -->|Sends audio/text| B[Client Websocket]
+    A[Client] -->|Sends audio/text| B[Client WebSocket]
     subgraph Realtime_Session["Realtime Session"]
-        B[Client Websocket]
+        B[Client WebSocket]
         C[Logic]
-        D[Realtime AI Websocket]
+        D[Realtime AI WebSocket]
     end
     E[OpenAI Realtime API]
 
