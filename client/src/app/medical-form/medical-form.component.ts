@@ -27,7 +27,7 @@ export class MedicalFormComponent implements OnInit {
   private utilitiesService = inject(UtilitiesService);
   private initialPatientData: Patient = {
     tab: PatientTab.Patient,
-    information: { name: '', dob: '', gender: '', notes: '' },
+    information: { name: '', age: '', gender: '', notes: '' },
     symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1, notes: '' }],
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };

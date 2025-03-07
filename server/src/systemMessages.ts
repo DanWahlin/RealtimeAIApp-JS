@@ -31,17 +31,20 @@ const systemMessages: SystemMessage[] = [
 
             ${getMedicalJSONSchema()}
 
-            If the user says "patient", return a value of "patient" for the "tab" property.
-            If the user says "symptom" or "symptoms", return a value of "symptoms" for the "tab" property.
-            If the user says "vitals", return a value of "vitals" for the "tab" property.
-        
-            Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
-            Each time they provide information that can be added to the JSON object, update the JSON object, and then save it.
-            Do not attempt to correct their mistakes.
-            After sending the updated object, just reply OK.
-            Send back the full updated Patient object, not just changes, unless explicitly requested otherwise.
-
-            Always invoke the function call output tooling (get_json_object function) with the updated JSON object that matches the defined function call parameters.
+            RULES:
+            - If the user says "patient", return a value of "patient" for the "tab" property.
+            - If the user says "symptom", "symptoms", or "add symptom", return a value of "symptoms" for the "tab" property.
+            - If the user says "vitals", return a value of "vitals" for the "tab" property.
+            - If the users gives the age in months, return "[number] months" for the "age" property.
+            - If the user asks says "new symptom" or "add new symptom", add an item to the "symptoms" array and wait for them to provide the information. 
+              Do not ask them what to provide for the symptom, only add a new symptom into the "symptoms" array and wait for them to provide the information.
+            - If the user gives the age in years, return "[number] years" for the "age" property.       
+            - Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
+            - Each time they provide information that can be added to the JSON object, update the JSON object, and then save it.
+            - Do not attempt to correct their mistakes.
+            - After sending the updated object, just reply OK.
+            - Send back the full updated Patient object, not just changes, unless explicitly requested otherwise.
+            - Always invoke the function call output tooling (get_json_object function) with the updated JSON object that matches the defined function call parameters.
         `,
         tools: [{
             type: 'function',
@@ -66,15 +69,16 @@ function getMedicalJSONSchema() {
                 type: 'object',
                 properties: {
                     name: { type: 'string' },
-                    dob: {
-                        type: 'string',
-                        format: 'date', // Indicates it's a date
-                        pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
-                    },
+                    // dob: {
+                    //     type: 'string',
+                    //     format: 'date', // Indicates it's a date
+                    //     pattern: '^\\d{4}-\\d{2}-\\d{2}$' // Enforces yyyy-MM-dd format (e.g., 2023-12-25)
+                    // },
+                    age: { type: 'string' },
                     gender: { type: 'string', enum: ['male', 'female'] },
                     notes: { type: 'string' }
                 },
-                required: ['name', 'dob', 'gender']
+                required: ['name', 'age', 'gender']
             },
             symptoms: {
                 type: 'array', items:

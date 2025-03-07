@@ -37,7 +37,7 @@ export type Symptom = {
 
 export type Patient = {
   tab: PatientTab;
-  information: { name: string; dob: string; gender: string, notes: string };
+  information: { name: string; age: string; gender: string, notes: string };
   symptoms: Symptom[];
   vitals: { temperature: number; bloodPressure: string; heartRate: number };
 }
