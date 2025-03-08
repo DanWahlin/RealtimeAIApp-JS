@@ -23,8 +23,13 @@
                 </mat-form-field>
 
                 <mat-form-field>
-                    <mat-label>Notes</mat-label>
-                    <textarea matInput [(ngModel)]="patient.information.notes" title="Patient notes"></textarea>
+                    <mat-label>Past Medical History</mat-label>
+                    <textarea matInput [(ngModel)]="patient.information.historyPastMedical" title="Patient history"></textarea>
+                </mat-form-field>
+
+                <mat-form-field>
+                    <mat-label>History of Present Illness</mat-label>
+                    <textarea matInput [(ngModel)]="patient.information.historyOfPresentIllness" title="Patient history of present illness"></textarea>
                 </mat-form-field>
             </div>
         </mat-tab>

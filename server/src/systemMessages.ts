@@ -38,8 +38,13 @@ const systemMessages: SystemMessage[] = [
             - If the users gives the age in months, return "[number] months" for the "age" property.
             - If the user asks says "new symptom" or "add new symptom", add an item to the "symptoms" array and wait for them to provide the information. 
               Do not ask them what to provide for the symptom, only add a new symptom into the "symptoms" array and wait for them to provide the information.
-            - For the patient information, if they've already provided the "name", "age", and "gender", add anything else about the patient into the "notes" property.
-            - If the user gives the age in years, return "[number] years" for the "age" property.       
+            - If they say "past medical history" or "history of" then add the content into the "historyPastMedical" property. Add the full content that the user
+              says, not the summary of what they say.
+            - If they say "HPI" or "history of present illness", then add the content into the "historyOfPresentIllness" property. Add the full content that the user
+              mentions.
+            - If the user gives the age in years, return "[number] years" for the "age" property.      
+            - If the user says "clear form" or "clear data" or "clear patient", then clear the entire JSON object and assign default values to the properties. For string properties, 
+              assign empty strings, for numbers, assign 0. Set "gender" to empty strings: '' and ensure that all history properties are set to empty strings as well.
             - Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
             - Each time they provide information that can be added to the JSON object, update the JSON object, and then save it.
             - Do not attempt to correct their mistakes.
@@ -77,7 +82,8 @@ function getMedicalJSONSchema() {
                     // },
                     age: { type: 'string' },
                     gender: { type: 'string', enum: ['male', 'female'] },
-                    notes: { type: 'string' }
+                    historyPastMedical: { type: 'string' },
+                    historyOfPresentIllness: { type: 'string' }
                 },
                 required: ['name', 'age', 'gender']
             },

@@ -27,7 +27,7 @@ export class MedicalFormComponent implements OnInit {
   private utilitiesService = inject(UtilitiesService);
   private initialPatientData: Patient = {
     tab: PatientTab.Patient,
-    information: { name: '', age: '', gender: '', notes: '' },
+    information: { name: '', age: '', gender: '', historyPastMedical: '', historyOfPresentIllness: '' },
     symptoms: [{ id: this.nextSymptomId++, description: '', duration: '', severity: 1, notes: '' }],
     vitals: { temperature: 0.0, bloodPressure: '', heartRate: 0 }
   };
@@ -134,6 +134,7 @@ export class MedicalFormComponent implements OnInit {
         // const modelChanged = this.updateModelProperties(this.patient, mergedNewModel);
         console.log('patient changed:', this.patient);
       } catch (error) {
+        console.log('******', functionCallOutputMessages[0].content);
         console.error('Error parsing function call output:', error);
       } finally {
         this.isUpdating = false;

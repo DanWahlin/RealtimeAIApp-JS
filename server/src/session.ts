@@ -46,6 +46,9 @@ const REALTIME_SERVER_EVENTS = {
 };
 
 export class RTSession {
+  private static tokenCache: { token: string, expires: number } | null = null;
+  private static readonly TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes before expiry
+
   private readonly sessionId = crypto.randomUUID();
   private openAIWs!: WebSocket;
 
@@ -108,13 +111,38 @@ export class RTSession {
       openAIWs.on('error', (error) => reject(error));
     });
   }
+  
   private async getWebSocketHeaders(): Promise<{ [key: string]: string }> {
     if (BACKEND === 'azure') {
-      const token = await new DefaultAzureCredential().getToken('https://cognitiveservices.azure.com/.default');
+      const now = Date.now();
+      
+      // Use cached token if available and not near expiration
+      if (RTSession.tokenCache && 
+          RTSession.tokenCache.token && 
+          RTSession.tokenCache.expires > now + RTSession.TOKEN_REFRESH_THRESHOLD_MS) {
+        this.logger.info('✅ Azure access token retrieved from cache');
+        return { 
+          Authorization: `Bearer ${RTSession.tokenCache.token}`, 
+          'OpenAI-Beta': 'realtime=v1' 
+        };
+      }
+      
+      const token = await new DefaultAzureCredential().getToken(
+        'https://cognitiveservices.azure.com/.default'
+      );
+      
       if (!token?.token) throw new Error('🔥 Failed to retrieve Azure access token');
+      
+      // Cache the token with expiration
+      RTSession.tokenCache = {
+        token: token.token,
+        expires: now + (token.expiresOnTimestamp * 1000)
+      };
+      
       this.logger.info('✅ Azure access token retrieved successfully');
       return { Authorization: `Bearer ${token.token}`, 'OpenAI-Beta': 'realtime=v1' };
     }
+    
     if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
     return { Authorization: `Bearer ${OPENAI_API_KEY}`, 'OpenAI-Beta': 'realtime=v1' };
   }
@@ -150,68 +178,104 @@ export class RTSession {
   private handleRealtimeMessage(data: RawData) {
     try {
       const event = JSON.parse(data.toString());
-      // this.logger.debug({ event }, 'Received realtime event');
-
-      const handlers: Partial<Record<keyof typeof REALTIME_SERVER_EVENTS, (event: any) => void>> = {
-        SessionCreated: (event) => {
+      
+      // Direct mapping of event types to handler functions using an object literal
+      const handlerMap: Record<string, (event: any) => void> = {
+        [REALTIME_SERVER_EVENTS.SessionCreated]: (event) => {
           this.logger.info({ session_id: event.session?.id }, '✅ Session created');
-          // Send a message to the client to update the UI
           this.send({ type: 'control', action: 'session_created', id: this.sessionId });
         },
-        SessionUpdated: () => this.logger.info('✅ Session configuration updated'),
-        InputAudioBufferSpeechStarted: () => this.send({ type: 'control', action: 'speech_started' }),
-        InputAudioBufferCommitted: () => {
+        [REALTIME_SERVER_EVENTS.SessionUpdated]: () => 
+          this.logger.info('✅ Session configuration updated'),
+        
+        [REALTIME_SERVER_EVENTS.InputAudioBufferSpeechStarted]: () => 
+          this.send({ type: 'control', action: 'speech_started' }),
+        
+        [REALTIME_SERVER_EVENTS.InputAudioBufferCommitted]: (event) => {
           if (event.transcript) {
             this.send({ type: 'transcription', text: event.transcript });
             this.logger.debug({ transcriptionLength: event.transcript.length }, '✅ Input audio processed successfully');
           }
         },
-        InputAudioBufferCleared: () => this.logger.debug('✅ Input audio buffer cleared'),
-        ResponseAudioDelta: () => event.delta && this.sendBinary(Buffer.from(event.delta, 'base64')),
-        ResponseAudioDone: () => this.logger.debug({ item_id: event.item_id }, '✅ Audio response completed'),
-        ResponseAudioTranscriptDelta: () => {
+        
+        [REALTIME_SERVER_EVENTS.InputAudioBufferCleared]: () => 
+          this.logger.debug('✅ Input audio buffer cleared'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseAudioDelta]: (event) => {
+          if (event.delta) {
+            this.sendBinary(Buffer.from(event.delta, 'base64'));
+          }
+        },
+        
+        [REALTIME_SERVER_EVENTS.ResponseAudioDone]: (event) => 
+          this.logger.debug({ item_id: event.item_id }, '✅ Audio response completed'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseAudioTranscriptDelta]: (event) => {
           if (event.delta) {
             const contentId = event.item_id || this.sessionId;
             this.send({ id: contentId, type: 'text_delta', delta: event.delta });
           }
         },
-        ResponseAudioTranscriptDone: () => {
+        
+        [REALTIME_SERVER_EVENTS.ResponseAudioTranscriptDone]: (event) => {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
-        ResponseContentPartAdded: () => this.logger.debug({ item_id: event.item_id }, 'Content part added'),
-        ResponseTextDelta: () => {
+        
+        [REALTIME_SERVER_EVENTS.ResponseContentPartAdded]: (event) => 
+          this.logger.debug({ item_id: event.item_id }, 'Content part added'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseTextDelta]: (event) => {
           if (event.delta) {
             const contentId = event.item_id || this.sessionId;
             this.send({ id: contentId, type: 'text_delta', delta: event.delta });
           }
         },
-        ResponseTextDone: () => {
+        
+        [REALTIME_SERVER_EVENTS.ResponseTextDone]: (event) => {
           const contentId = event.item_id || this.sessionId;
           this.send({ type: 'control', action: 'text_done', id: contentId });
         },
-        ResponseFunctionCallArgumentsDelta: () => this.logger.debug('✅ Ignoring function call arguments delta for simplicity'),
-        ResponseFunctionCallArgumentsDone: (event: any) => this.handleFunctionCallArgumentsDone(event),
-        ResponseDone: () => this.logger.debug({ response_id: event.response?.id }, '✅ Response generation completed'),
-        Error: () => this.logger.error({ error: event.error }, '🔥 Realtime API error'),
-        ConversationItemCreated: () => this.logger.debug({ item: event.item }, '✅ Conversation item created'),
-        ConversationItemInputAudioTranscriptionCompleted: () => this.logger.debug({ item_id: event.item_id, transcript: event.transcript }, '✅ Transcription completed'),
-        ConversationItemInputAudioTranscriptionFailed: () => this.logger.error({ error: event.error }, '🔥 Transcription failed'),
-        ResponseCreated: () => this.logger.debug('✅ Response created'),
-        RateLimitsUpdated: () => this.logger.debug('✅ Rate limits updated'),
-        ResponseOutputItemAdded: () => this.logger.debug('✅ Response output item added'),
-        ResponseOutputItemDone: () => this.logger.debug('✅ Response output item done'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseFunctionCallArgumentsDelta]: () => 
+          this.logger.debug('✅ Ignoring function call arguments delta for simplicity'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseFunctionCallArgumentsDone]: (event) => 
+          this.handleFunctionCallArgumentsDone(event),
+        
+        [REALTIME_SERVER_EVENTS.ResponseDone]: (event) => 
+          this.logger.debug({ response_id: event.response?.id }, '✅ Response generation completed'),
+        
+        [REALTIME_SERVER_EVENTS.Error]: (event) => 
+          this.logger.error({ error: event.error }, '🔥 Realtime API error'),
+        
+        [REALTIME_SERVER_EVENTS.ConversationItemCreated]: (event) => 
+          this.logger.debug({ item: event.item }, '✅ Conversation item created'),
+        
+        [REALTIME_SERVER_EVENTS.ConversationItemInputAudioTranscriptionCompleted]: (event) => 
+          this.logger.debug({ item_id: event.item_id, transcript: event.transcript }, '✅ Transcription completed'),
+        
+        [REALTIME_SERVER_EVENTS.ConversationItemInputAudioTranscriptionFailed]: (event) => 
+          this.logger.error({ error: event.error }, '🔥 Transcription failed'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseCreated]: () => 
+          this.logger.debug('✅ Response created'),
+        
+        [REALTIME_SERVER_EVENTS.RateLimitsUpdated]: () => 
+          this.logger.debug('✅ Rate limits updated'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseOutputItemAdded]: () => 
+          this.logger.debug('✅ Response output item added'),
+        
+        [REALTIME_SERVER_EVENTS.ResponseOutputItemDone]: () => 
+          this.logger.debug('✅ Response output item done'),
       };
-
-      // Map the incoming event.type to the corresponding key in REALTIME_SERVER_EVENTS
-      const eventKey = (Object.keys(REALTIME_SERVER_EVENTS) as (keyof typeof REALTIME_SERVER_EVENTS)[])
-        .find(key => REALTIME_SERVER_EVENTS[key] === event.type);
-      const handler = eventKey ? handlers[eventKey] : undefined;
-
+  
+      // Direct O(1) lookup instead of searching through keys
+      const handler = handlerMap[event.type];
       if (handler) {
         handler(event);
-      }
-      else {
+      } else {
         this.logger.debug({ type: event.type }, '🟠 Unhandled event type');
       }
     } catch (error) {
