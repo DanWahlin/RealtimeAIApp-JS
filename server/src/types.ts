@@ -1,9 +1,3 @@
-export type InitMessage = { 
-    role: string; 
-    message: string; 
-    tools: any[]; 
-};
-
 export type WSMessage =
     | { id: string; type: 'text_delta'; delta: string }
     | { id?: string; type: 'transcription'; text: string }
@@ -29,3 +23,11 @@ export type SystemMessage = {
     message: string;
     tools: SystemMessageTool[];
 }
+
+export type AudioMetrics = {
+    totalBytesSent: number;
+    totalBatchesSent: number;
+    maxBatchSize: number;
+    lastSendTime: number;
+    droppedChunks: number;
+  }
