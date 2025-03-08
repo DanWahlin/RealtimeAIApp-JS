@@ -38,6 +38,7 @@ const systemMessages: SystemMessage[] = [
             - If the users gives the age in months, return "[number] months" for the "age" property.
             - If the user asks says "new symptom" or "add new symptom", add an item to the "symptoms" array and wait for them to provide the information. 
               Do not ask them what to provide for the symptom, only add a new symptom into the "symptoms" array and wait for them to provide the information.
+            - For the patient information, if they've already provided the "name", "age", and "gender", add anything else about the patient into the "notes" property.
             - If the user gives the age in years, return "[number] years" for the "age" property.       
             - Listen to the user and collect information from them. Do not reply to them unless they explicitly ask for your input. Just listen.
             - Each time they provide information that can be added to the JSON object, update the JSON object, and then save it.
