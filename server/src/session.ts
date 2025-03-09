@@ -593,7 +593,7 @@ export class RTSession {
     (this as any).openAIWs = null;
     (this as any).systemMessage = null;  // Changed from initMessage to systemMessage
 
-    this.logger.info('Session disposed');
+    this.logger.info('🗑️ Session disposed');
     this.logger.flush();
   }
 }
