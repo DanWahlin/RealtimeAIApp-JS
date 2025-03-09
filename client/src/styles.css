@@ -7,3 +7,20 @@ body {
 }
 html, body { height: 100%; }
 body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+
+.highlight {
+  padding: 5px;
+  border-radius: 5px;
+  color: #fff;
+  background-color: #23aa2c;
+  margin-top: 20px;
+}
+
+.highlight:last-of-type {
+  margin-bottom: 20px;
+}
+
+.language-label {
+  font-weight: bold;
+  margin-right: 4px;
+}

@@ -35,12 +35,12 @@ export class MedicalFormComponent implements OnInit {
   systemMessageType: SystemMessageType = 'medical-form';
 
   selectedTabIndex = 0;
-  // Use definite assignment assertion (!) to indicate patient will be assigned in ngOnInit
   patient!: Patient;
-  private isUpdating = false; // Flag to prevent reentrant updates
-  private lastSentPatient: Patient | null = null; // Track last sent patient to avoid redundant sends
-  private lastUpdateTimestamp = 0; // Track last update timestamp for debouncing
-  private readonly DEBOUNCE_DELAY = 500; // 500ms debounce to prevent rapid updates
+  private isUpdating = false;
+  initialMessageReceived = false;
+  private lastSentPatient: Patient | null = null;
+  private lastUpdateTimestamp = 0;
+  private readonly DEBOUNCE_DELAY = 500;
   private realtimeManagerService = inject(RealTimeManagerService);
 
   ngOnInit() {
@@ -49,17 +49,20 @@ export class MedicalFormComponent implements OnInit {
   }
 
   private onPatientChanged() {
-    if (this.isUpdating) return;
-    const now = Date.now();
-    if (now - this.lastUpdateTimestamp < this.DEBOUNCE_DELAY) return; // Debounce to prevent rapid updates
+    if (!this.initialMessageReceived || this.isUpdating) {
+      return; // Prevent sending until initial message is received or if already updating
+    }
 
+    const now = Date.now();
+    if (now - this.lastUpdateTimestamp < this.DEBOUNCE_DELAY) return;
+  
     this.isUpdating = true;
     try {
-      // Only send if patient has changed since last send (deep comparison)
       if (!this.isEqual(this.lastSentPatient, this.patient)) {
+        console.log('Sending updated patient data:', this.patient);
         this.realtimeManagerService.sendMessage(`The updated patientData is ${JSON.stringify(this.patient)}.`);
-        this.lastSentPatient = JSON.parse(JSON.stringify(this.patient)); // Deep copy to track state
-        this.lastUpdateTimestamp = now; // Update timestamp after successful send
+        this.lastSentPatient = JSON.parse(JSON.stringify(this.patient));
+        this.lastUpdateTimestamp = now;
       }
     } finally {
       this.isUpdating = false;
@@ -122,6 +125,10 @@ export class MedicalFormComponent implements OnInit {
   }
 
   onMessagesChanged(messages: Message[]): void {
+    if (!this.initialMessageReceived && messages.length > 0) {
+      this.initialMessageReceived = true;
+    }
+  
     const functionCallOutputMessages = messages.filter(m => m.action === 'function_call_output');
     if (functionCallOutputMessages.length && !this.isUpdating) {
       this.isUpdating = true;
@@ -129,9 +136,7 @@ export class MedicalFormComponent implements OnInit {
         const newModel = JSON.parse(functionCallOutputMessages[0].content) as Patient;
         const mergedNewModel = this.mergeModel(newModel);
         this.patient = mergedNewModel;
-        // update selected tab index
         this.selectedTabIndex = this.tabs.indexOf(this.patient.tab);
-        // const modelChanged = this.updateModelProperties(this.patient, mergedNewModel);
         console.log('patient changed:', this.patient);
       } catch (error) {
         console.log('******', functionCallOutputMessages[0].content);

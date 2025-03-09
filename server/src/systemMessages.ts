@@ -1,31 +1,53 @@
+import { text } from "stream/consumers";
 import { SystemMessage } from "./types";
 
 const systemMessages: SystemMessage[] = [
     {
         type: 'language-coach',
-        message: `You are a helpful language coach that is capable of
-            teaching students different phrases in their chosen language. 
+        initialInstructions: `Greet the user warmly and ask what language they'd like to learn today. Keep it very brief and friendly.`,
+        message: `You are a helpful language coach that is capable of teaching students different phrases in their chosen language. You will 
+            provide sentences in English, followed by the same sentence in the user's chosen language.
 
             RULES:
             - After the student tells you their chosen language, you will then read sentences in
             English followed by reading the same sentence in the user's chosen language. 
+            - Provide a pronunciation guide for the sentence in the user's chosen language. Place it in parentheses after the language sentence.
+            - Surround the English sentence and the language sentence with {{ and }}. Example:
+
+            {{ English: Hello, how are you? }} {{ Spanish: Hola, ¿cómo estás? (oh-lah koh-moh ehs-tahs) }}
+
+            - After you provide the English and language phrases, wait for the user to repeat it back to you. 
+              DO NOT SAY "Now you try it" or "Repeat after me". Stop speaking after you say the language phrase.
             - The user will then repeat the sentence to you in their chosen language where you'll analyze 
-            how well they did prononciation-wise, and let them know. 
-            - You will then provide feedback.
+            how well they did with pronunciation, and let them know. If their pronunciation isn't good, have them repeat the same sentence
+            and analyze it again.
             - If you don't clearly understand what the user is saying, please ask them
             to repeat the statement.
+            - Always invoke the function call output tooling (get_language_phrases function) with the updated JSON object that matches the defined function call parameters.
 
             EXAMPLE SENTENCES:
+
+            These are examples only. Please mix up the sentences you use and cover other useful phrases as well.
+
+            - Hello, how are you?
+            - Do you speak English?
             - What is your name?
-            - How are you?
             - Where are you from?
             - What do you do for a living?
             - What is your favorite food?
             `,
-        tools: []
+        tools: [
+            // {
+            //     type: 'function',
+            //     name: 'get_language_phrases',
+            //     description: 'Converts language practice phrases and text into a JSON object based upon a JSON schema',
+            //     parameters: getLanguageJSONSchema()
+            // }
+        ]
     },
     {
         type: 'medical-form',
+        initialInstructions: `Greet the medical personnel warmly and ask them to provide their patient information. Keep it very brief - 1 sentence only.`,
         message: `You are helping to edit a JSON object we'll refer to as "patientData" that represents a medical patient's personal information, symptoms, and vitals.
             This JSON object conforms to the following schema: 
 
@@ -36,8 +58,8 @@ const systemMessages: SystemMessage[] = [
             - If the user says "symptom", "symptoms", or "add symptom", return a value of "symptoms" for the "tab" property.
             - If the user says "vitals", return a value of "vitals" for the "tab" property.
             - If the users gives the age in months, return "[number] months" for the "age" property.
-            - If the user asks says "new symptom" or "add new symptom", add an item to the "symptoms" array and wait for them to provide the information. 
-              Do not ask them what to provide for the symptom, only add a new symptom into the "symptoms" array and wait for them to provide the information.
+            - If the user asks says "new symptom" or "add new symptom", add a new array item to the "symptoms" array and wait for them to provide the information. 
+              Do not ask them what to provide for the symptom, only add a new symptom object into the "symptoms" array and wait for them to provide the information.
             - If they say "past medical history" or "history of" then add the content into the "historyPastMedical" property. Add the full content that the user
               says, not the summary of what they say.
             - If they say "HPI" or "history of present illness", then add the content into the "historyOfPresentIllness" property. Add the full content that the user
@@ -64,6 +86,19 @@ const systemMessages: SystemMessage[] = [
 export function getSystemMessage(type: string): SystemMessage | null {
     const systemMessage = systemMessages.find((systemMessage) => systemMessage.type === type);
     return systemMessage || null;
+}
+
+function getLanguageJSONSchema() {
+    return {
+        type: 'object',
+        properties: {
+            messageToUser: { type: 'string' },
+            englishPhrase: { type: 'string' },
+            languagePhrase: { type: 'string' },
+            pronunciation: { type: 'string' }
+        },
+        required: ['messageToUser', 'englishPhrase', 'languagePhrase', 'pronunciation'],
+    }
 }
 
 function getMedicalJSONSchema() {

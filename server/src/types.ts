@@ -20,6 +20,7 @@ export type SystemMessageTool = {
 
 export type SystemMessage = {
     type: 'language-coach' | 'medical-form';
+    initialInstructions: string;
     message: string;
     tools: SystemMessageTool[];
 }

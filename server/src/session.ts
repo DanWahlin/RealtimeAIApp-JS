@@ -10,10 +10,10 @@ const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT }
 
 const SESSION_CONFIG = {
   modalities: ['text', 'audio'],
-  voice: 'alloy',
+  voice: 'ash', // ash, coral, sage, shimmer, verse, alloy
   input_audio_format: 'pcm16',
   input_audio_transcription: { model: 'whisper-1' },
-  turn_detection: { type: 'server_vad', threshold: 0.4, silence_duration_ms: 600 },
+  turn_detection: { type: 'server_vad', threshold: 0.6, silence_duration_ms: 500 },
   tool_choice: 'auto',
 };
 
@@ -198,6 +198,8 @@ export class RTSession {
         [REALTIME_SERVER_EVENTS.SessionCreated]: (event) => {
           this.logger.info({ session_id: event.session?.id }, '✅ Session created');
           this.send({ type: 'control', action: 'session_created', id: this.sessionId });
+          // Send an automatic greeting once the session is created
+          this.sendInitialGreeting();
         },
         [REALTIME_SERVER_EVENTS.SessionUpdated]: () =>
           this.logger.info('✅ Session configuration updated'),
@@ -297,6 +299,24 @@ export class RTSession {
     }
   }
 
+  private sendInitialGreeting() {
+    if (this.openAIWs?.readyState === WebSocket.OPEN) {
+      this.logger.info(`🗣️ Sending initial greeting for ${this.systemMessage?.type}`);
+      
+      this.openAIWs.send(JSON.stringify({ 
+        type: 'response.create',
+        event_id: `greeting_${this.sessionId.substring(0, 8)}`,
+        response: {
+          modalities: ['text', 'audio'],
+          voice: SESSION_CONFIG.voice,
+          instructions: this.systemMessage?.initialInstructions
+        }
+      }));
+    }
+  }
+
+  // 👋 Hello there! I'm your language learning assistant. What language would you like to learn today?
+
   private handleClientMessage(data: RawData, isBinary: boolean) {
     try {
       if (isBinary) {
@@ -314,12 +334,12 @@ export class RTSession {
       this.logger.warn('🟠 Realtime WebSocket not open for binary message');
       return;
     }
-  
+
     // Add to buffer queue and track size
     const audioBuffer = Buffer.from(data as ArrayBuffer);
     this.audioBufferQueue.push(audioBuffer);
     this.currentBufferSize += audioBuffer.length;
-  
+
     // Flush immediately if buffer exceeds size threshold
     if (this.currentBufferSize > this.MAX_BUFFER_SIZE) {
       if (this.audioBufferTimer) {
@@ -329,40 +349,47 @@ export class RTSession {
       this.flushAudioBuffer();
       return;
     }
-  
+
     // Schedule a flush if not already scheduled
     if (!this.audioBufferTimer) {
       this.audioBufferTimer = setTimeout(() => this.flushAudioBuffer(), this.BATCH_INTERVAL_MS);
     }
   }
-  
+
   private flushAudioBuffer() {
     this.audioBufferTimer = null;
-  
+
     // Skip if no data to send or connection issues
     if (this.audioBufferQueue.length === 0) return;
     if (!this.openAIWs || this.openAIWs.readyState !== WebSocket.OPEN) {
       this.clearAudioQueue();
       return;
     }
-  
+
     try {
       // Handle backpressure if needed
       const bufferedAmount = (this.openAIWs as any)._socket?.bufferedAmount || 0;
       if (this.handleBackpressure(bufferedAmount)) return;
-  
+
       // Prepare and send the combined audio buffer
       const totalSize = this.currentBufferSize;
       const combinedBuffer = this.combineAudioBuffers(totalSize);
-      
+
+      // Additional check to ensure combinedBuffer is not empty
+      if (combinedBuffer.length === 0) {
+        this.logger.warn('Combined buffer is empty after combination. Skipping send.');
+        this.clearAudioQueue();
+        return;
+      }
+
       // Clear queue early to allow for new data accumulation
       this.clearAudioQueue();
-  
+
       // Send the audio data and measure performance
       const sendStart = performance.now();
       this.sendAudioToOpenAI(combinedBuffer, totalSize);
       const sendDuration = performance.now() - sendStart;
-      
+
       // Update metrics and log if significant
       this.updateAudioMetrics(totalSize, sendDuration);
     } catch (error) {
@@ -370,73 +397,73 @@ export class RTSession {
       this.clearAudioQueue();
     }
   }
-  
+
   // Three focused helper methods that handle specific concerns
   private clearAudioQueue(): void {
     this.audioBufferQueue = [];
     this.currentBufferSize = 0;
   }
-  
+
   private handleBackpressure(bufferedAmount: number): boolean {
     if (bufferedAmount <= 1_000_000) return false; // No backpressure
-    
+
     // Calculate severity and trim queue if needed
     const severityFactor = Math.min(bufferedAmount / 2_000_000, 1);
     const effectiveQueueSize = Math.max(1, Math.floor(this.MAX_QUEUE_SIZE * (1 - severityFactor)));
-    
+
     if (this.audioBufferQueue.length > effectiveQueueSize) {
       const droppedCount = this.audioBufferQueue.length - effectiveQueueSize;
       this.audioMetrics.droppedChunks += droppedCount;
-      
+
       this.logger.warn(
-        `🟠 WebSocket backpressure detected (${(bufferedAmount/1024/1024).toFixed(2)}MB). ` +
+        `🟠 WebSocket backpressure detected (${(bufferedAmount / 1024 / 1024).toFixed(2)}MB). ` +
         `Dropping ${droppedCount} oldest audio chunks.`
       );
-      
+
       // Keep only the most recent chunks
       this.audioBufferQueue = this.audioBufferQueue.slice(-effectiveQueueSize);
       this.currentBufferSize = this.audioBufferQueue.reduce((size, buffer) => size + buffer.length, 0);
     }
-    
+
     // Reschedule with adaptive delay
     const adaptiveDelay = 100 + Math.floor(severityFactor * 400);
     this.audioBufferTimer = setTimeout(() => this.flushAudioBuffer(), adaptiveDelay);
     return true;
   }
-  
+
   private combineAudioBuffers(totalSize: number): Buffer {
     // Create a single buffer containing all audio chunks
     const combinedBuffer = Buffer.allocUnsafe(totalSize);
-    
+
     let offset = 0;
     for (const buffer of this.audioBufferQueue) {
       buffer.copy(combinedBuffer, offset);
       offset += buffer.length;
     }
-    
+
     return combinedBuffer;
   }
-  
+
   private sendAudioToOpenAI(buffer: Buffer, totalSize: number): void {
     const audioData = buffer.toString('base64');
-    
+
     if (audioData.length > 5_000_000) {
-      this.logger.debug(`Sending large audio payload: ${(audioData.length/1024/1024).toFixed(2)}MB`);
+      this.logger.debug(`Sending large audio payload: ${(audioData.length / 1024 / 1024).toFixed(2)}MB`);
     }
-    
+
     this.openAIWs.send(JSON.stringify({
       type: 'input_audio_buffer.append',
       audio: audioData
     }));
   }
-  
+
   private updateAudioMetrics(size: number, duration: number): void {
     // Update metrics
     this.audioMetrics.totalBytesSent += size;
     this.audioMetrics.totalBatchesSent++;
     this.audioMetrics.maxBatchSize = Math.max(this.audioMetrics.maxBatchSize, size);
     this.audioMetrics.lastSendTime = duration;
-  
+
     // Log only significant events
     if (size > 32768 || duration > 50) {
       this.logger.debug(
@@ -455,11 +482,11 @@ export class RTSession {
         maxBatchSize: `${this.audioMetrics.maxBatchSize} bytes`,
         avgSendTime: `${(this.audioMetrics.lastSendTime).toFixed(1)} ms`,
       };
-      
+
       if (this.audioMetrics.droppedChunks > 0) {
         (metrics as any).droppedChunks = this.audioMetrics.droppedChunks;
       }
-      
+
       this.logger.info({ audioStats: metrics }, 'Audio transmission statistics');
     }
   }

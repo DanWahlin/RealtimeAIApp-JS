@@ -1,9 +1,9 @@
 @if (this.showMessages) {
     <div class="messages-container" [hidden]="!isConnected">
         <div>
-            @for (message of messages; track message.id) {
+            @for (message of formattedMessages; track $index) {
             <div class="message">
-                {{message.content}}
+                <span [innerHTML]="message.formattedContent"></span>
             </div>
             }
             <div #messagesEnd></div>
