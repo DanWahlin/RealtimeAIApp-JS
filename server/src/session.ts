@@ -1,12 +1,20 @@
 import { WebSocket, RawData } from 'ws';
 import { Logger } from 'pino';
 import { DefaultAzureCredential } from '@azure/identity';
+import { OpenAIRealtimeWS } from 'openai/beta/realtime/ws';
 import { config } from 'dotenv';
 import * as crypto from 'crypto';
 import { AudioMetrics, SystemMessage, WSMessage } from './types';
+import { AzureOpenAI } from 'openai';
 config({ path: '../.env' });
 
-const { BACKEND = 'openai', OPENAI_API_KEY, OPENAI_ENDPOINT, OPENAI_DEPLOYMENT } = process.env as Record<string, string>;
+const {
+  BACKEND,
+  OPENAI_API_KEY,
+  OPENAI_ENDPOINT,
+  OPENAI_DEPLOYMENT,
+  OPENAI_API_VERSION
+} = process.env as Record<string, string>;
 
 const SESSION_CONFIG = {
   modalities: ['text', 'audio'],
@@ -46,6 +54,7 @@ const REALTIME_SERVER_EVENTS = {
 };
 
 export class RTSession {
+  private readonly openAIWsUrl = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
   private static tokenCache: { token: string, expires: number } | null = null;
   private static readonly TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
@@ -110,8 +119,10 @@ export class RTSession {
 
   private initializeRealtimeWebSocket(): Promise<WebSocket> {
     const url = BACKEND === 'azure'
-      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=2024-10-01-preview`
-      : 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01';
+      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=${OPENAI_API_VERSION}`
+      : this.openAIWsUrl;
+
+    this.logger.info(`🔌 Connecting to OpenAI WebSocket at ${url}`);
 
     return new Promise(async (resolve, reject) => {
       const headers = await this.getWebSocketHeaders();
@@ -122,7 +133,32 @@ export class RTSession {
         resolve(openAIWs);
       });
 
-      openAIWs.on('error', (error) => reject(error));
+      openAIWs.on('error', (error) => {
+        console.log(error);
+        reject(error);
+      });
+    });
+  }
+
+  private async initializeRealtimeAzureOpenAIWebSocket(): Promise<WebSocket> {
+    const azureOpenAIClient = new AzureOpenAI({
+        apiKey: OPENAI_API_KEY,
+        apiVersion: OPENAI_API_VERSION,
+        deployment: OPENAI_DEPLOYMENT,
+        endpoint: OPENAI_ENDPOINT
+    });
+    return new Promise(async (resolve, reject) => {
+      const openAISocketClient = await OpenAIRealtimeWS.azure(azureOpenAIClient);
+
+      openAISocketClient.socket.on('open', () => {
+        this.logger.info('🟢 OpenAI WebSocket connection opened');
+        resolve(openAISocketClient.socket);
+      });
+
+      openAISocketClient.socket.on('error', (error) => {
+        this.logger.error({ error }, `🔥 OpenAI WebSocket error: ${openAISocketClient.socket.url}`);
+        reject(error);
+      });
     });
   }
 
@@ -302,8 +338,8 @@ export class RTSession {
   private sendInitialGreeting() {
     if (this.openAIWs?.readyState === WebSocket.OPEN) {
       this.logger.info(`🗣️ Sending initial greeting for ${this.systemMessage?.type}`);
-      
-      this.openAIWs.send(JSON.stringify({ 
+
+      this.openAIWs.send(JSON.stringify({
         type: 'response.create',
         event_id: `greeting_${this.sessionId.substring(0, 8)}`,
         response: {

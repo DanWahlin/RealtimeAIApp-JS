@@ -1,3 +1,4 @@
+
 export type WSMessage =
     | { id: string; type: 'text_delta'; delta: string }
     | { id?: string; type: 'transcription'; text: string }
@@ -19,10 +20,10 @@ export type SystemMessageTool = {
 }
 
 export type SystemMessage = {
-    type: 'language-coach' | 'medical-form';
+    type: 'language-coach' | 'medical-form' | 'medical-question-answer';
     initialInstructions: string;
     message: string;
-    tools: SystemMessageTool[];
+    tools?: SystemMessageTool[];
 }
 
 export type AudioMetrics = {
@@ -31,4 +32,5 @@ export type AudioMetrics = {
     maxBatchSize: number;
     lastSendTime: number;
     droppedChunks: number;
-  }
+}
+  

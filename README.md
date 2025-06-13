@@ -13,15 +13,15 @@ This project demonstrates how to build a real-time AI application using the Azur
 ## Getting Started
 
 1. Clone the project.
-2. Create a `gpt-4o-realtime-preview` model deployment in [Azure AI Foundry](https://ai.azure.com).
+2. Create a `gpt-4o-mini-realtime-preview` model deployment in [Azure AI Foundry](https://ai.azure.com).
 3. Rename `.env.example` to `.env` in the root of the project.
-4. Add your `gpt-4o-realtime-preview` endpoint to `OPENAI_ENDPOINT` and your key to `OPENAI_API_KEY`. You can get those values from Azure AI Foundry.
+4. Add your `gpt-4o-mini-realtime-preview` endpoint to `OPENAI_ENDPOINT` and your key to `OPENAI_API_KEY`. You can get those values from Azure AI Foundry.
 
   ```
   OPENAI_API_KEY=
+  OPENAI_DEPLOYMENT=gpt-4o-mini-realtime-preview
   OPENAI_ENDPOINT=
-  OPENAI_DEPLOYMENT=gpt-4o-realtime-preview
-  OPENAI_API_VERSION=2024-10-01
+  OPENAI_API_VERSION=2025-04-01-preview
   BACKEND=azure
   ```
 

@@ -1,4 +1,3 @@
-import { text } from "stream/consumers";
 import { SystemMessage } from "./types";
 
 const systemMessages: SystemMessage[] = [
@@ -80,25 +79,17 @@ const systemMessages: SystemMessage[] = [
             description: 'Converts text into a JSON object based upon a JSON schema',
             parameters: getMedicalJSONSchema()
         }]
+    },
+    {
+        type: 'medical-question-answer',
+        initialInstructions: `Greet the medical personnel warmly and ask them what their question is. Keep it very brief - 1 sentence only.`,
+        message: `You're a medical question and answer assistant capable of answering questions about medical symptoms, conditions, and treatments.`,
     }
 ]
 
 export function getSystemMessage(type: string): SystemMessage | null {
     const systemMessage = systemMessages.find((systemMessage) => systemMessage.type === type);
     return systemMessage || null;
-}
-
-function getLanguageJSONSchema() {
-    return {
-        type: 'object',
-        properties: {
-            messageToUser: { type: 'string' },
-            englishPhrase: { type: 'string' },
-            languagePhrase: { type: 'string' },
-            pronunciation: { type: 'string' }
-        },
-        required: ['messageToUser', 'englishPhrase', 'languagePhrase', 'pronunciation'],
-    }
 }
 
 function getMedicalJSONSchema() {
@@ -134,4 +125,17 @@ function getMedicalJSONSchema() {
         required: ['tab', 'information', 'symptoms', 'vitals'],
     }
 }
+
+// function getLanguageJSONSchema() {
+//     return {
+//         type: 'object',
+//         properties: {
+//             messageToUser: { type: 'string' },
+//             englishPhrase: { type: 'string' },
+//             languagePhrase: { type: 'string' },
+//             pronunciation: { type: 'string' }
+//         },
+//         required: ['messageToUser', 'englishPhrase', 'languagePhrase', 'pronunciation'],
+//     }
+// }
 

@@ -1,9 +1,11 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import { pino } from 'pino';
 import { RTSession } from './session.js';
 import { getSystemMessage } from './systemMessages.js';
+
+const PORT = process.env.PORT || 8080;
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'debug',
@@ -13,6 +15,8 @@ const logger = pino({
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
+
+app.use(express.json()); // Middleware to parse JSON bodies
 
 server.on('upgrade', (request, socket, head) => {
   const { pathname } = new URL(request.url!, `http://${request.headers.host}`);
@@ -51,10 +55,8 @@ wss.on('connection', (ws: WebSocket) => {
             }
 
             logger.info('🔄 Initializing RTSession');
-
-            // Grab system message and any tools from systemMessages.ts
             const systemMessage = getSystemMessage(initSystemMessage.systemMessageType);
-            logger.info( { systemMessage }, 'System message retrieved');
+            logger.info( { systemMessage }, '✅ System message retrieved');
             
             rtSession = new RTSession(ws, logger, systemMessage);
             // Remove message handler once session is created
@@ -86,5 +88,14 @@ wss.on('connection', (ws: WebSocket) => {
   ws.on('close', () => handleSocketEvent('close'));
 });
 
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => logger.info(`Server started on http://localhost:${PORT}`));
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  logger.error('🔥 Unhandled error:', err);
+  res.status(500).json({ error: '🔥 Internal server error' });
+});
+
+server.listen(PORT, () => logger.info(`🟢 WebSocket server started on http://localhost:${PORT}`));
+
+server.on('close', () => {
+  logger.info('🔴 WebSocket server stopped');
+  logger.info('🔴 MCP server stopped');
+});
