@@ -124,7 +124,7 @@ mat-form-field {
 
 /* Chip styling - consolidated */
 mat-chip-listbox {
-  --mdc-chip-container-height: 32px;
+  --mat-chip-container-height: 32px;
   display: inline-flex !important;
   align-items: center !important;
 }
