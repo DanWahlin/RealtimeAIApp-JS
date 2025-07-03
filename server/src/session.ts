@@ -117,9 +117,11 @@ export class RTSession {
     }
   }
 
+  // Initializes the OpenAI Real Time WebSocket connection
+  // Uses the OpenAI Realtime API if BACKEND is not 'azure', otherwise uses Azure OpenAI Real Time API
   private initializeRealtimeWebSocket(): Promise<WebSocket> {
     const url = BACKEND === 'azure'
-      ? `${OPENAI_ENDPOINT}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=${OPENAI_API_VERSION}`
+      ? `${OPENAI_ENDPOINT.replace('https://', 'wss://')}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=${OPENAI_API_VERSION}`
       : this.openAIWsUrl;
 
     this.logger.info(`🔌 Connecting to OpenAI WebSocket at ${url}`);
@@ -140,6 +142,7 @@ export class RTSession {
     });
   }
 
+  // Initializes the OpenAI WebSocket connection using Azure OpenAI client
   private async initializeRealtimeAzureOpenAIWebSocket(): Promise<WebSocket> {
     const azureOpenAIClient = new AzureOpenAI({
         apiKey: OPENAI_API_KEY,
@@ -164,6 +167,15 @@ export class RTSession {
 
   private async getWebSocketHeaders(): Promise<{ [key: string]: string }> {
     if (BACKEND === 'azure') {
+      // If API key is provided, use it instead of managed identity
+      if (OPENAI_API_KEY) {
+        this.logger.info('✅ Using Azure OpenAI API key');
+        return { 
+          'api-key': OPENAI_API_KEY
+        };
+      }
+
+      // Otherwise, use managed identity
       const now = Date.now();
 
       // Use cached token if available and not near expiration
@@ -172,8 +184,7 @@ export class RTSession {
         RTSession.tokenCache.expires > now + RTSession.TOKEN_REFRESH_THRESHOLD_MS) {
         this.logger.info('✅ Azure access token retrieved from cache');
         return {
-          Authorization: `Bearer ${RTSession.tokenCache.token}`,
-          'OpenAI-Beta': 'realtime=v1'
+          Authorization: `Bearer ${RTSession.tokenCache.token}`
         };
       }
 
@@ -186,11 +197,13 @@ export class RTSession {
       // Cache the token with expiration
       RTSession.tokenCache = {
         token: token.token,
-        expires: now + (token.expiresOnTimestamp * 1000)
+        expires: token.expiresOnTimestamp // Already in milliseconds
       };
 
       this.logger.info('✅ Azure access token retrieved successfully');
-      return { Authorization: `Bearer ${token.token}`, 'OpenAI-Beta': 'realtime=v1' };
+      return { 
+        Authorization: `Bearer ${token.token}`
+      };
     }
 
     if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not set');
