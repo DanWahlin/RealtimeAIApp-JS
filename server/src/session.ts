@@ -216,9 +216,9 @@ export class RTSession {
     }
   }
 
-  private sendBinary(data: ArrayBuffer) {
+  private sendBinary(data: ArrayBuffer | Buffer) {
     if (this.clientWs.readyState === WebSocket.OPEN) {
-      this.clientWs.send(Buffer.from(data), { binary: true });
+      this.clientWs.send(data, { binary: true });
     }
   }
 

@@ -4,6 +4,8 @@
 node_modules
 npm-debug.log
 sandboxes.ts
+.claude
+CLAUDE.md
 
 # Code Editor Settings
 .idea

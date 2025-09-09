@@ -85,20 +85,23 @@ class MCPClient {
     async callTools(tool_calls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]) {
         const toolResults = [];
         for (const tool_call of tool_calls) {
-            const toolName = tool_call.function.name;
-            const args = tool_call.function.arguments;
+            // Type guard to check if it's a function tool call
+            if ('function' in tool_call) {
+                const toolName = tool_call.function.name;
+                const args = tool_call.function.arguments;
 
-            this.logger.info(`🛠️ Calling tool ${toolName} with args ${JSON.stringify(args)}`);
+                this.logger.info(`🛠️ Calling tool ${toolName} with args ${JSON.stringify(args)}`);
 
-            const toolResult = await this.mcp.callTool({
-                name: toolName,
-                arguments: JSON.parse(args),
-            });
+                const toolResult = await this.mcp.callTool({
+                    name: toolName,
+                    arguments: JSON.parse(args),
+                });
 
-            toolResults.push({
-                name: toolName,
-                result: toolResult,
-            });
+                toolResults.push({
+                    name: toolName,
+                    result: toolResult,
+                });
+            }
         }
         return toolResults;
     }

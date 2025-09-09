@@ -89,7 +89,7 @@ wss.on('connection', (ws: WebSocket) => {
 });
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  logger.error('🔥 Unhandled error:', err);
+  logger.error(err, '🔥 Unhandled error');
   res.status(500).json({ error: '🔥 Internal server error' });
 });
 

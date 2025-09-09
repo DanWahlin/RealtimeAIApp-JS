@@ -2,7 +2,7 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import * as crypto from 'crypto';
 import { McpServer, PromptCallback, ReadResourceTemplateCallback, ResourceTemplate, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { pino } from 'pino';
+import pino from 'pino';
 import { z } from 'zod';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -131,7 +131,7 @@ export class MCPServerManager {
           this.logger.info(`🔴 MCP client disconnected: ${clientId}`);
         });
       } catch (error) {
-        this.logger.error(`🔥 Error establishing SSE connection for ${clientId}:`, error);
+        this.logger.error(error as Error, `🔥 Error establishing SSE connection for ${clientId}`);
         res.status(500).json({ error: 'Failed to establish connection' });
       }
     });
