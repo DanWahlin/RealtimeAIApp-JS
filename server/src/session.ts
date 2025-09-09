@@ -12,7 +12,7 @@ const {
   BACKEND,
   OPENAI_API_KEY,
   OPENAI_ENDPOINT,
-  OPENAI_DEPLOYMENT,
+  OPENAI_MODEL,
   OPENAI_API_VERSION
 } = process.env as Record<string, string>;
 
@@ -54,7 +54,7 @@ const REALTIME_SERVER_EVENTS = {
 };
 
 export class RTSession {
-  private readonly openAIWsUrl = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
+  private readonly openAIWsUrl = `wss://api.openai.com/v1/realtime?model=${process.env.OPENAI_MODEL || 'gpt-realtime'}`;
   private static tokenCache: { token: string, expires: number } | null = null;
   private static readonly TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
@@ -121,7 +121,7 @@ export class RTSession {
   // Uses the OpenAI Realtime API if BACKEND is not 'azure', otherwise uses Azure OpenAI Real Time API
   private initializeRealtimeWebSocket(): Promise<WebSocket> {
     const url = BACKEND === 'azure'
-      ? `${OPENAI_ENDPOINT.replace('https://', 'wss://')}/openai/realtime?deployment=${OPENAI_DEPLOYMENT}&api-version=${OPENAI_API_VERSION}`
+      ? `${OPENAI_ENDPOINT.replace('https://', 'wss://')}/openai/realtime?deployment=${OPENAI_MODEL}&api-version=${OPENAI_API_VERSION}`
       : this.openAIWsUrl;
 
     this.logger.info(`🔌 Connecting to OpenAI WebSocket at ${url}`);
@@ -147,7 +147,7 @@ export class RTSession {
     const azureOpenAIClient = new AzureOpenAI({
         apiKey: OPENAI_API_KEY,
         apiVersion: OPENAI_API_VERSION,
-        deployment: OPENAI_DEPLOYMENT,
+        deployment: OPENAI_MODEL,
         endpoint: OPENAI_ENDPOINT
     });
     return new Promise(async (resolve, reject) => {

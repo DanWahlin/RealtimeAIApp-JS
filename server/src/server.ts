@@ -97,5 +97,4 @@ server.listen(PORT, () => logger.info(`🟢 WebSocket server started on http://l
 
 server.on('close', () => {
   logger.info('🔴 WebSocket server stopped');
-  logger.info('🔴 MCP server stopped');
 });

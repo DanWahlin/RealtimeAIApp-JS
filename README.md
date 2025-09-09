@@ -19,7 +19,7 @@ This project demonstrates how to build a real-time AI application using the Azur
 
   ```
   OPENAI_API_KEY=
-  OPENAI_DEPLOYMENT=gpt-4o-mini-realtime-preview
+  OPENAI_MODEL=gpt-4o-mini-realtime-preview
   OPENAI_ENDPOINT=
   OPENAI_API_VERSION=2025-04-01-preview
   BACKEND=azure
