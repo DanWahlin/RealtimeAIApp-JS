@@ -4,7 +4,7 @@ import { DefaultAzureCredential } from '@azure/identity';
 import { OpenAIRealtimeWS } from 'openai/beta/realtime/ws';
 import { config } from 'dotenv';
 import * as crypto from 'crypto';
-import { AudioMetrics, SystemMessage, WSMessage } from './types';
+import { AudioMetrics, SystemMessage, WSMessage, OpenAIError, RateLimits } from './types';
 import { AzureOpenAI } from 'openai';
 config({ path: '../.env' });
 
@@ -21,8 +21,13 @@ const SESSION_CONFIG = {
   voice: 'ash', // ash, coral, sage, shimmer, verse, alloy
   input_audio_format: 'pcm16',
   input_audio_transcription: { model: 'whisper-1' },
-  turn_detection: { type: 'server_vad', threshold: 0.6, silence_duration_ms: 500 },
+  turn_detection: { 
+    type: 'server_vad', 
+    threshold: parseFloat(process.env.VAD_THRESHOLD || '0.6'), 
+    silence_duration_ms: parseInt(process.env.SILENCE_DURATION_MS || '500')
+  },
   tool_choice: 'auto',
+  max_response_output_tokens: parseInt(process.env.MAX_OUTPUT_TOKENS || '4096'),
 };
 
 const REALTIME_SERVER_EVENTS = {
@@ -69,7 +74,11 @@ export class RTSession {
     totalBatchesSent: 0,
     maxBatchSize: 0,
     lastSendTime: 0,
-    droppedChunks: 0
+    droppedChunks: 0,
+    avgLatency: 0,
+    lastResponseTime: 0,
+    sessionStartTime: Date.now(),
+    totalResponses: 0
   };
 
   private readonly sessionId = crypto.randomUUID();
@@ -272,8 +281,10 @@ export class RTSession {
           }
         },
 
-        [REALTIME_SERVER_EVENTS.ResponseAudioDone]: (event) =>
-          this.logger.debug({ item_id: event.item_id }, '✅ Audio response completed'),
+        [REALTIME_SERVER_EVENTS.ResponseAudioDone]: (event) => {
+          this.updateLatencyMetrics();
+          this.logger.debug({ item_id: event.item_id }, '✅ Audio response completed');
+        },
 
         [REALTIME_SERVER_EVENTS.ResponseAudioTranscriptDelta]: (event) => {
           if (event.delta) {
@@ -308,11 +319,25 @@ export class RTSession {
         [REALTIME_SERVER_EVENTS.ResponseFunctionCallArgumentsDone]: (event) =>
           this.handleFunctionCallArgumentsDone(event),
 
-        [REALTIME_SERVER_EVENTS.ResponseDone]: (event) =>
-          this.logger.debug({ response_id: event.response?.id }, '✅ Response generation completed'),
+        [REALTIME_SERVER_EVENTS.ResponseDone]: (event) => {
+          this.updateLatencyMetrics();
+          this.logger.debug({ response_id: event.response?.id }, '✅ Response generation completed');
+        },
 
-        [REALTIME_SERVER_EVENTS.Error]: (event) =>
-          this.logger.error({ error: event.error }, '🔥 Realtime API error'),
+        [REALTIME_SERVER_EVENTS.Error]: (event) => {
+          this.logger.error({ 
+            errorType: event.error?.type,
+            errorCode: event.error?.code,
+            eventId: event.error?.event_id,
+            message: event.error?.message 
+          }, '🔥 OpenAI API Error');
+          this.send({
+            type: 'control',
+            action: 'error',
+            error: event.error,
+            id: this.sessionId
+          });
+        },
 
         [REALTIME_SERVER_EVENTS.ConversationItemCreated]: (event) =>
           this.logger.debug({ item: event.item }, '✅ Conversation item created'),
@@ -326,8 +351,15 @@ export class RTSession {
         [REALTIME_SERVER_EVENTS.ResponseCreated]: () =>
           this.logger.debug('✅ Response created'),
 
-        [REALTIME_SERVER_EVENTS.RateLimitsUpdated]: () =>
-          this.logger.debug('✅ Rate limits updated'),
+        [REALTIME_SERVER_EVENTS.RateLimitsUpdated]: (event) => {
+          this.logger.info({ rateLimits: event.rate_limits }, '📊 Rate limits updated');
+          this.send({
+            type: 'control',
+            action: 'rate_limits_updated',
+            rateLimits: event.rate_limits,
+            id: this.sessionId
+          });
+        },
 
         [REALTIME_SERVER_EVENTS.ResponseOutputItemAdded]: () =>
           this.logger.debug('✅ Response output item added'),
@@ -522,21 +554,40 @@ export class RTSession {
     }
   }
 
+  private updateLatencyMetrics(): void {
+    const now = Date.now();
+    this.audioMetrics.totalResponses++;
+    
+    if (this.audioMetrics.lastResponseTime > 0) {
+      const latency = now - this.audioMetrics.lastResponseTime;
+      this.audioMetrics.avgLatency = (
+        (this.audioMetrics.avgLatency * (this.audioMetrics.totalResponses - 1) + latency) / 
+        this.audioMetrics.totalResponses
+      );
+    }
+    
+    this.audioMetrics.lastResponseTime = now;
+  }
+
   private logAudioMetrics() {
     if (this.audioMetrics.totalBatchesSent > 0) {
+      const sessionDuration = (Date.now() - this.audioMetrics.sessionStartTime) / 1000;
       const metrics = {
         totalSent: `${(this.audioMetrics.totalBytesSent / 1024 / 1024).toFixed(2)} MB`,
         batches: this.audioMetrics.totalBatchesSent,
         avgBatchSize: `${Math.round(this.audioMetrics.totalBytesSent / this.audioMetrics.totalBatchesSent)} bytes`,
         maxBatchSize: `${this.audioMetrics.maxBatchSize} bytes`,
         avgSendTime: `${(this.audioMetrics.lastSendTime).toFixed(1)} ms`,
+        sessionDuration: `${sessionDuration.toFixed(1)}s`,
+        totalResponses: this.audioMetrics.totalResponses,
+        avgLatency: `${this.audioMetrics.avgLatency.toFixed(0)} ms`,
       };
 
       if (this.audioMetrics.droppedChunks > 0) {
         (metrics as any).droppedChunks = this.audioMetrics.droppedChunks;
       }
 
-      this.logger.info({ audioStats: metrics }, 'Audio transmission statistics');
+      this.logger.info({ audioStats: metrics }, 'Enhanced audio transmission statistics');
     }
   }
 

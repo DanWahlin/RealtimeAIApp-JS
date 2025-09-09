@@ -12,6 +12,22 @@ export type WSMessage = {
   delta?: string;
   action?: string;
   functionCallParams?: string;
+  error?: OpenAIError;
+  rateLimits?: RateLimits;
+}
+
+export type OpenAIError = {
+  type: string;
+  code?: string;
+  message: string;
+  event_id?: string;
+}
+
+export type RateLimits = {
+  name: string;
+  limit: number;
+  remaining: number;
+  reset_seconds: number;
 }
 
 export type WebSocketMessage = {

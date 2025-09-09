@@ -249,6 +249,19 @@ export class RealTimeManagerService implements OnDestroy {
             this._isSessionCreated.next(true);
             console.log('Session created notification received:', message.id);
             break;
+          case 'error':
+            if (message.error) {
+              const errorMessage = `OpenAI Error (${message.error.type}): ${message.error.message}`;
+              console.error('OpenAI API Error:', message.error);
+              this._error.next(errorMessage);
+            }
+            break;
+          case 'rate_limits_updated':
+            if (message.rateLimits) {
+              console.log('Rate limits updated:', message.rateLimits);
+              // You could emit this to a rate limits observable if needed for UI display
+            }
+            break;
         }
         break;
     }
